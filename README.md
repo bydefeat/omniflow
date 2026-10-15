@@ -1,36 +1,45 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OmniFlow Enterprise
+> **Internal Request & Approval Workflow Management System**  
+> *Hệ thống Quản lý Yêu cầu và Luồng Phê duyệt Nội bộ Tự động hóa Đa cấp*
 
-## Getting Started
+---
 
-First, run the development server:
+## Giới thiệu dự án (Overview)
+**OmniFlow Enterprise** là giải pháp điều phối yêu cầu và quản lý phê duyệt đa cấp nội bộ doanh nghiệp. Hệ thống số hóa toàn bộ quy trình giấy tờ hành chính, quản lý ngân sách mua sắm, đề xuất nhân sự, nghỉ phép và cấp phát tài nguyên CNTT.
 
+### Phân hệ chức năng chính (Core Modules):
+1. **Requester / Employee Portal (Cổng tạo yêu cầu)**:
+   - Danh mục biểu mẫu chuẩn hóa (Nghỉ phép, Mua sắm trang thiết bị, Đề xuất thanh toán, Tạm ứng công tác).
+   - Theo dõi trạng thái yêu cầu theo thời gian thực (Draft, Pending, Approved, Rejected, Need More Info).
+   - Đính kèm hồ sơ, chứng từ, hóa đơn điện tử và ghi chú chi tiết.
+2. **Approval Action Center (Trung tâm xét duyệt & thẩm định)**:
+   - Cơ chế duyệt tuần tự hoặc song song (Sequential / Parallel Approval Workflow).
+   - Phê duyệt nhanh, từ chối kèm lý do bắt buộc, yêu cầu bổ sung thông tin hoặc ủy quyền phê duyệt.
+   - Định tuyến theo hạn mức ngân sách và ma trận phân quyền phòng ban.
+3. **Audit Trail & System Administration (Quản trị & Kiểm toán nội bộ)**:
+   - Nhật ký kiểm toán toàn vẹn (Activity Timeline & Audit Log) lưu vết từng thao tác.
+   - Thống kê thời gian xử lý trung bình (SLA Turnaround Time) và tỷ lệ phê duyệt.
+
+---
+
+## Công nghệ sử dụng (Tech Stack)
+- **Framework:** Next.js (App Router, React 19)
+- **Language:** TypeScript
+- **Styling:** Tailwind CSS
+
+---
+
+## Hướng dẫn cài đặt (Getting Started)
+
+1. Cài đặt các gói phụ thuộc:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Chạy môi trường phát triển:
+```bash
+npm run dev
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Mở trình duyệt tại [http://localhost:3000](http://localhost:3000).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
