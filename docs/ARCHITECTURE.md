@@ -192,9 +192,10 @@ DRAFT ──submit──▶ PENDING ──duyệt bước cuối──▶ APPROV
 | `cancelRequest` | Chỉ người làm đơn, đơn đang DRAFT hoặc PENDING → `CANCELLED`, các lượt `WAITING` → `CANCELLED` |
 
 **Xác định người duyệt** (`resolveApprover()` trong `approvals.service.ts`), chạy khi tạo mỗi lượt:
-1. Bước có `KieuNguoiDuyet = MANAGER` → `managerId` của người làm đơn. Bước `ROLE` → người có vai trò cấu hình ở bước đó.
-2. Nếu người đó đang có ủy quyền hiệu lực (`ACTIVE`, `NgayBatDau ≤ now ≤ NgayKetThuc`) → giao lượt cho người được ủy quyền, lưu người gốc ở `approvals.onBehalfOfId` để audit.
-3. Không tìm được ai → không cho gửi đơn, báo lỗi rõ cho người dùng (cấu hình thiếu), không tạo lượt treo.
+1. Bước có `KieuNguoiDuyet = MANAGER` → gán `approverId` = `managerId` của người làm đơn. Bước `ROLE` → gán `approverRole`, mọi người có vai trò đó đều thấy lượt này, ai xử lý trước thì lượt thuộc về người đó (khóa dòng chặn hai người cùng duyệt).
+2. Không tìm được ai (không có quản lý, không ai giữ vai trò) → không cho gửi đơn, báo lỗi rõ cho người dùng (cấu hình thiếu), không tạo lượt treo.
+
+**Ủy quyền xét lúc đọc và lúc duyệt, không xét lúc tạo lượt:** người B thấy và duyệt được lượt của A nếu A đang ủy quyền cho B (`ACTIVE`, `NgayBatDau ≤ now ≤ NgayKetThuc`). Khi B duyệt, lưu `actedById = B`, `onBehalfOfId = A`. Nhờ vậy lượt tạo trước khi ủy quyền vẫn chuyển cho B, và hết hạn ủy quyền thì tự trả về A.
 
 Tiền luôn tính lại ở server (`ThanhTien = SoLuong × DonGia`, `TongTien = Σ ThanhTien`), không tin số client gửi lên. Mã đơn `REQ-<năm>-<số>` sinh trong transaction từ sequence của Postgres.
 
