@@ -182,24 +182,27 @@ Index: (`userId`, `readAt`).
 
 ## 3. Các giai đoạn
 
-### Giai đoạn 1 — Nền tảng
+### Giai đoạn 1 — Nền tảng ✅ (2026-10-19)
 
-- [ ] `.env.example` với `DEFEAT_POSTGRES_PRIMARY_DATABASE_CONNECTION_URL`, `DEFEAT_BETTER_AUTH_SESSION_SIGNING_SECRET_KEY`, `DEFEAT_BETTER_AUTH_PUBLIC_APPLICATION_BASE_URL`, `DEFEAT_UPLOAD_DIRECTORY`; thêm `.env*.local` và `uploads/` vào `.gitignore`
-- [ ] `src/shared/libs/env.lib.ts`: parse bằng zod, lỗi ngay khi khởi động nếu thiếu biến
-- [ ] `src/shared/libs/db.lib.ts`: `drizzle(postgres(url), { schema })`, gom schema từ các module; giữ một client duy nhất khi dev (gắn vào `globalThis`)
-- [ ] `drizzle.config.ts` (đọc schema `src/modules/**/*.schema.ts`, thư mục migration `drizzle/`); script `db:generate`, `db:migrate`, `db:studio` trong `package.json`
-- [ ] Migration đầu tiên: `CREATE EXTENSION btree_gist`
-- [ ] `src/shared/constants/theme.constant.ts`, `src/shared/components/providers.tsx` (QueryClientProvider), `src/shared/libs/query-client.lib.ts`
-- [ ] `src/app/layout.tsx`: `AntdRegistry` + `ConfigProvider` (locale `vi_VN`) + `Providers`; xóa nội dung mẫu ở `page.tsx`, `globals.css`
-- [ ] Cách chạy Postgres khi dev (`docker-compose.yml` một service `postgres:17`, hoặc ghi rõ dùng Postgres cài sẵn)
+- [x] `.env.example` (4 biến `DEFEAT_*`), `.env` local (gitignored, secret sinh ngẫu nhiên); `.gitignore` thêm `!.env.example`, `/uploads`
+- [x] `src/shared/libs/env.lib.ts`: parse bằng zod, lỗi ngay khi khởi động nếu thiếu biến
+- [x] `src/shared/libs/db.lib.ts`: `drizzle(postgres(url), { schema, casing: "snake_case" })`, một pool duy nhất khi dev (`globalThis`)
+- [x] `src/shared/libs/schema.lib.ts`: helper `id()` (uuidv7), `timestamps`
+- [x] **Schema cả 7 module theo mục 2** (14 bảng gồm 4 bảng better-auth), gom ở `src/modules/schema.ts`
+- [x] `drizzle.config.ts`; script `db:generate`, `db:migrate`, `db:studio`
+- [x] Migration `0000_init.sql` (sinh tự động) + `0001_delegations_no_overlap.sql` (viết tay: `btree_gist` + exclusion constraint), đã chạy trên DB `omniflow`
+- [x] Đã thử trên DB: cột `amount` tự tính; các check (đơn PENDING phải có mã, bước ROLE phải có vai trò, từ chối phải có lý do, lượt chỉ một người/vai trò, không tự ủy quyền) và ủy quyền chồng thời gian đều bị chặn
+- [x] `theme.constant.ts`, `query-client.lib.ts`, `providers.tsx` (QueryClient, ConfigProvider `vi_VN`, dayjs `vi`, antd `App`)
+- [x] `src/app/layout.tsx`: font Inter (có subset `vietnamese`), `<Suspense>` + `AntdRegistry layer`; `globals.css` xếp `@layer antd` giữa preflight và utilities
+- [x] Postgres: dùng Postgres 18 cài sẵn trên máy (`localhost:5432`), không cần Docker
 
-**Xong khi:** `npm run dev` lên trang trống có theme antd, `npm run db:migrate` chạy được trên DB rỗng, `npm run build` qua.
+**Đã kiểm:** `npm run build`, `tsc --noEmit`, `npm run lint` đều qua; truy vấn qua `db.lib.ts` chạy được.
 
 ### Giai đoạn 2 — Xác thực và phân quyền
 
 - [ ] `src/shared/constants/role.constant.ts`: `employee`, `approver`, `admin` + danh sách vai trò chức năng (G2) + trang đích sau đăng nhập
 - [ ] `src/shared/libs/auth.lib.ts`: `betterAuth()` với drizzle adapter, `emailAndPassword` (tắt tự đăng ký), plugin `admin`, `user.additionalFields` (`employeeCode`, `departmentId`, `managerId`); truyền `secret`, `baseURL` từ env
-- [ ] Sinh bảng auth vào `src/modules/users/users.schema.ts`, migrate
+- [x] Bảng auth đã viết tay ở `src/modules/users/users.schema.ts` (giai đoạn 1); khi cấu hình xong `auth.lib.ts` chạy `npx @better-auth/cli generate` để so, lệch thì sửa schema
 - [ ] `src/shared/libs/auth-client.lib.ts`, `src/app/api/auth/[...all]/route.ts`
 - [ ] `src/shared/libs/session.lib.ts`: `getSession()`, `requireRole(role)` (không có session → sign-in; sai role → 403)
 - [ ] `src/shared/libs/action.lib.ts`: `authedProcedure`, `roleProcedure(role)` bằng `createServerActionProcedure`; tài khoản bị khóa thì chặn

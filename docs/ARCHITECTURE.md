@@ -30,7 +30,7 @@ src/
 │   └── authentication.proxy.ts      # chưa có cookie session → /authentication/sign-in
 │
 ├── app/                             # CHỈ routing: page/layout mỏng, gọi xuống shared + modules
-│   ├── layout.tsx                   # root layout DUY NHẤT: <html>, AntdRegistry, ConfigProvider, <Providers>
+│   ├── layout.tsx                   # root layout DUY NHẤT: <html>, <Suspense> + AntdRegistry layer, <Providers>
 │   ├── page.tsx                     # /  → redirect theo role (role.constant.ts)
 │   │
 │   ├── (authentication)/
@@ -77,6 +77,7 @@ src/
 │       └── files/[fileId]/route.ts  # tải tệp đính kèm, kiểm tra quyền trước khi trả file
 │
 ├── modules/                         # NGHIỆP VỤ theo domain (bounded context), xem mục 3
+│   ├── schema.ts                    # gom mọi *.schema.ts cho db.lib.ts và auth.lib.ts
 │   ├── departments/                 # mỗi module, ví dụ requests/:
 │   ├── users/                       #   requests.schema.ts      bảng Drizzle
 │   ├── request-types/               #   requests.validation.ts  zod schema, dùng chung form client + action
@@ -87,7 +88,7 @@ src/
 │
 └── shared/                          # KHÔNG chứa nghiệp vụ; ai cũng import được
     ├── components/
-    │   ├── providers.tsx            # "use client": QueryClientProvider
+    │   ├── providers.tsx            # "use client": QueryClientProvider, ConfigProvider (theme, vi_VN), antd App
     │   ├── layouts/                 # 3 layout độc lập, xem mục 4
     │   │   ├── authentication/
     │   │   ├── workspace/
@@ -101,7 +102,8 @@ src/
     │   └── media-query.hook.ts      # export useMediaQuery
     ├── libs/
     │   ├── env.lib.ts               # parse các biến DEFEAT_* bằng zod
-    │   ├── db.lib.ts                # drizzle client + gom schema từ modules
+    │   ├── db.lib.ts                # drizzle client (casing snake_case) + schema từ modules/schema.ts
+    │   ├── schema.lib.ts            # helper cột dùng chung cho *.schema.ts: id() (uuidv7), timestamps
     │   ├── auth.lib.ts              # betterAuth() (server)
     │   ├── auth-client.lib.ts       # createAuthClient() (client)
     │   ├── session.lib.ts           # getSession(), requireRole()
@@ -154,7 +156,7 @@ CDM không có khóa ngoại (đúng chuẩn Merise). Khóa ngoại được th�
 
 ### Hướng import
 
-**Giữa các lớp (một chiều):** `app` → `modules` → `shared`. `shared` không import `modules` hay `app`.
+**Giữa các lớp (một chiều):** `app` → `modules` → `shared`. `shared` không import `modules` hay `app`. Ngoại lệ duy nhất: `db.lib.ts` và `auth.lib.ts` là điểm nối, được import `modules/schema.ts` (chỉ bảng, không nghiệp vụ).
 
 **Giữa các module:** khác hcmue-portal (module không import module), OmniFlow cho phép import có giới hạn, vì quy trình duyệt phải ghi nhiều bảng trong **một transaction** (gửi đơn = đổi trạng thái đơn + tạo lượt duyệt cấp 1 + tạo thông báo). Ghép ở `app` thì không giữ được transaction.
 

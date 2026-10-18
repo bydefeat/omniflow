@@ -1,3 +1,6 @@
+/* antd styles sit between Tailwind's preflight and utilities, so utilities can override antd. */
+@layer theme, base, antd, components, utilities;
+
 @import "tailwindcss";
 
 @theme inline {
