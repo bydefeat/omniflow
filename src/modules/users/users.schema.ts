@@ -10,17 +10,12 @@ import {
 
 import { departments } from "@/modules/departments/departments.schema";
 
-// Tables owned by better-auth (core + admin plugin). Keep field names in sync with
-// node_modules/@better-auth/core/dist/db/get-tables.mjs; only the fields marked
-// "OmniFlow" are ours (declared as user.additionalFields in auth.lib.ts).
-
-// NGUOI_DUNG + VAI_TRO (role) + TrangThai (banned)
 export const user = pgTable(
   "user",
   {
     id: text().primaryKey(),
-    name: text().notNull(), // HoTen
-    email: text().notNull().unique(), // Email
+    name: text().notNull(),
+    email: text().notNull().unique(),
     emailVerified: boolean().notNull().default(false),
     image: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
@@ -28,16 +23,14 @@ export const user = pgTable(
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
-    // admin plugin: comma-separated roles, ban = TrangThai LOCKED
     role: text(),
     banned: boolean().default(false),
     banReason: text(),
     banExpires: timestamp({ withTimezone: true }),
-    // OmniFlow
-    employeeCode: varchar({ length: 20 }).notNull().unique(), // MaNguoiDung
+    employeeCode: varchar({ length: 20 }).notNull().unique(),
     departmentId: text()
       .notNull()
-      .references(() => departments.id), // Thuộc Về (1,1)
+      .references(() => departments.id),
     managerId: text().references((): AnyPgColumn => user.id, {
       onDelete: "set null",
     }),
@@ -60,12 +53,11 @@ export const session = pgTable(
     userId: text()
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    impersonatedBy: text(), // admin plugin
+    impersonatedBy: text(),
   },
   (t) => [index().on(t.userId)],
 );
 
-// MatKhau lives here (password), not on user.
 export const account = pgTable(
   "account",
   {

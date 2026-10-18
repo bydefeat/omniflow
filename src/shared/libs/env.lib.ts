@@ -7,5 +7,4 @@ const schema = z.object({
   DEFEAT_UPLOAD_DIRECTORY: z.string().min(1),
 });
 
-// Fail fast at startup instead of at the first request that needs a variable.
 export const env = schema.parse(process.env);

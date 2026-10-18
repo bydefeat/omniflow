@@ -17,7 +17,6 @@ export const notificationType = pgEnum("notification_type", [
   "REQUEST_CANCELLED",
 ]);
 
-// Not in the CDM; required by UC-01.
 export const notifications = pgTable(
   "notifications",
   {

@@ -1,4 +1,3 @@
-// Every Drizzle table, for db.lib.ts and auth.lib.ts. Add new module schemas here.
 export * from "@/modules/approvals/approvals.schema";
 export * from "@/modules/delegations/delegations.schema";
 export * from "@/modules/departments/departments.schema";

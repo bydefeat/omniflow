@@ -21,7 +21,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="vi" className={`${inter.variable} h-full antialiased`}>
       <body className="min-h-full">
-        {/* AntdRegistry reads Math.random() during render; cacheComponents requires it inside Suspense. */}
         <Suspense fallback={null}>
           <AntdRegistry layer>
             <Providers>{children}</Providers>

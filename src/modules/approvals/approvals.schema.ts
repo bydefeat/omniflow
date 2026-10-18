@@ -22,24 +22,23 @@ export const approvalResult = pgEnum("approval_result", [
   "CANCELLED",
 ]);
 
-// LUOT_PHE_DUYET — also the audit trail: decided rows are never updated or deleted.
 export const approvals = pgTable(
   "approvals",
   {
-    id: id(), // MaLuotDuyet
+    id: id(),
     requestId: text()
       .notNull()
-      .references(() => requests.id), // Sinh Ra Lượt Duyệt
-    stepOrder: integer().notNull(), // ThuTuDuyet
-    stepName: varchar({ length: 100 }).notNull(), // snapshot of TenBuoc
-    approverId: text().references(() => user.id), // MANAGER step
-    approverRole: varchar({ length: 30 }), // ROLE step (G2)
-    actedById: text().references(() => user.id), // who clicked
-    onBehalfOfId: text().references(() => user.id), // delegation (G5)
-    result: approvalResult().notNull().default("WAITING"), // KetQua
-    comment: varchar({ length: 500 }), // YKienPhanHoi
-    dueAt: timestamp({ withTimezone: true }).notNull(), // created + slaHours
-    decidedAt: timestamp({ withTimezone: true }), // NgayQuyetDinh
+      .references(() => requests.id),
+    stepOrder: integer().notNull(),
+    stepName: varchar({ length: 100 }).notNull(),
+    approverId: text().references(() => user.id),
+    approverRole: varchar({ length: 30 }),
+    actedById: text().references(() => user.id),
+    onBehalfOfId: text().references(() => user.id),
+    result: approvalResult().notNull().default("WAITING"),
+    comment: varchar({ length: 500 }),
+    dueAt: timestamp({ withTimezone: true }).notNull(),
+    decidedAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
   (t) => [

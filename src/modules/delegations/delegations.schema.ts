@@ -12,28 +12,25 @@ import {
 import { user } from "@/modules/users/users.schema";
 import { id, timestamps } from "@/shared/libs/schema.lib";
 
-// EXPIRED is derived on read (ACTIVE and endsAt < now()), never stored.
 export const delegationStatus = pgEnum("delegation_status", [
   "ACTIVE",
   "CANCELLED",
 ]);
 
-// UY_QUYEN. No overlapping ACTIVE delegations per delegator: exclusion constraint
-// in a custom migration (drizzle cannot declare EXCLUDE).
 export const delegations = pgTable(
   "delegations",
   {
-    id: id(), // MaUyQuyen
+    id: id(),
     delegatorId: text()
       .notNull()
-      .references(() => user.id), // người ủy quyền
+      .references(() => user.id),
     delegateId: text()
       .notNull()
-      .references(() => user.id), // người được ủy quyền (G5)
-    startsAt: timestamp({ withTimezone: true }).notNull(), // NgayBatDau
-    endsAt: timestamp({ withTimezone: true }).notNull(), // NgayKetThuc
-    reason: varchar({ length: 255 }).notNull(), // LyDo
-    status: delegationStatus().notNull().default("ACTIVE"), // TrangThai
+      .references(() => user.id),
+    startsAt: timestamp({ withTimezone: true }).notNull(),
+    endsAt: timestamp({ withTimezone: true }).notNull(),
+    reason: varchar({ length: 255 }).notNull(),
+    status: delegationStatus().notNull().default("ACTIVE"),
     ...timestamps,
   },
   (t) => [

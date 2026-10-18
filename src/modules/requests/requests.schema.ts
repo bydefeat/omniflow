@@ -25,25 +25,24 @@ export const requestStatus = pgEnum("request_status", [
   "CANCELLED",
 ]);
 
-// DON_YEU_CAU
 export const requests = pgTable(
   "requests",
   {
     id: id(),
-    code: varchar({ length: 30 }).unique(), // MaDon, set on submit
+    code: varchar({ length: 30 }).unique(),
     requesterId: text()
       .notNull()
-      .references(() => user.id), // Tạo Đơn
+      .references(() => user.id),
     requestTypeId: text()
       .notNull()
-      .references(() => requestTypes.id), // Phân Loại
-    departmentId: text().references(() => departments.id), // snapshot on submit
-    title: varchar({ length: 200 }).notNull(), // TieuDe
-    reason: text().notNull(), // LyDo
+      .references(() => requestTypes.id),
+    departmentId: text().references(() => departments.id),
+    title: varchar({ length: 200 }).notNull(),
+    reason: text().notNull(),
     formData: jsonb().$type<Record<string, unknown>>().notNull().default({}),
-    totalAmount: numeric({ precision: 18, scale: 2 }), // TongTien
-    status: requestStatus().notNull().default("DRAFT"), // TrangThai
-    submittedAt: timestamp({ withTimezone: true }), // NgayTao
+    totalAmount: numeric({ precision: 18, scale: 2 }),
+    status: requestStatus().notNull().default("DRAFT"),
+    submittedAt: timestamp({ withTimezone: true }),
     completedAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
@@ -57,22 +56,21 @@ export const requests = pgTable(
   ],
 );
 
-// HANG_MUC_CHI_TIET
 export const requestItems = pgTable(
   "request_items",
   {
-    id: id(), // MaHangMuc
+    id: id(),
     requestId: text()
       .notNull()
-      .references(() => requests.id, { onDelete: "cascade" }), // Chứa Hạng Mục
+      .references(() => requests.id, { onDelete: "cascade" }),
     sortOrder: integer().notNull(),
-    name: varchar({ length: 200 }).notNull(), // TenHangMuc
-    unit: varchar({ length: 20 }).notNull(), // DonViTinh
-    quantity: numeric({ precision: 10, scale: 2 }).notNull(), // SoLuong
-    unitPrice: numeric({ precision: 18, scale: 2 }).notNull(), // DonGia
+    name: varchar({ length: 200 }).notNull(),
+    unit: varchar({ length: 20 }).notNull(),
+    quantity: numeric({ precision: 10, scale: 2 }).notNull(),
+    unitPrice: numeric({ precision: 18, scale: 2 }).notNull(),
     amount: numeric({ precision: 18, scale: 2 }).generatedAlwaysAs(
       sql`quantity * unit_price`,
-    ), // ThanhTien
+    ),
     ...timestamps,
   },
   (t) => [
@@ -82,22 +80,21 @@ export const requestItems = pgTable(
   ],
 );
 
-// TEP_DINH_KEM
 export const attachments = pgTable(
   "attachments",
   {
-    id: id(), // MaTep
+    id: id(),
     requestId: text()
       .notNull()
-      .references(() => requests.id, { onDelete: "cascade" }), // Có Đính Kèm
-    fileName: varchar({ length: 255 }).notNull(), // TenTep
-    storageKey: varchar({ length: 500 }).notNull(), // DuongDan (internal key, never a public URL)
+      .references(() => requests.id, { onDelete: "cascade" }),
+    fileName: varchar({ length: 255 }).notNull(),
+    storageKey: varchar({ length: 500 }).notNull(),
     mimeType: varchar({ length: 100 }).notNull(),
     sizeBytes: integer().notNull(),
     uploadedById: text()
       .notNull()
       .references(() => user.id),
-    uploadedAt: timestamp({ withTimezone: true }).notNull().defaultNow(), // NgayTaiLen
+    uploadedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index().on(t.requestId),
@@ -105,8 +102,6 @@ export const attachments = pgTable(
   ],
 );
 
-// Yearly counter for REQ-<year>-<number>; bumped with
-// INSERT ... ON CONFLICT (year) DO UPDATE ... RETURNING inside the submit transaction.
 export const requestCounters = pgTable("request_counters", {
   year: integer().primaryKey(),
   lastNumber: integer().notNull(),
