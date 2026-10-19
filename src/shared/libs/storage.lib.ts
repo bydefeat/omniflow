@@ -3,9 +3,7 @@ import path from "node:path";
 
 import { uuidv7 } from "uuidv7";
 
-import { env } from "@/shared/libs/env.lib";
-
-const root = path.resolve(process.cwd(), env.DEFEAT_UPLOAD_DIRECTORY);
+const root = path.join(process.cwd(), "uploads");
 
 function resolveKey(key: string) {
   if (!/^[0-9a-f-]{36}$/.test(key)) throw new Error("Invalid storage key");
