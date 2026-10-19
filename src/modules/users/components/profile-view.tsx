@@ -1,6 +1,7 @@
 "use client";
 
-import { App, Button, Card, Descriptions, Form, Input } from "antd";
+import { App, Button, Card, Descriptions, Form, Input, Typography } from "antd";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { PageHeader } from "@/shared/components/ui/page-header";
@@ -8,6 +9,7 @@ import { authClient } from "@/shared/libs/auth-client.lib";
 import { formatDate } from "@/shared/libs/format.lib";
 import { PASSWORD_HINT, passwordFormRule } from "@/shared/libs/password.lib";
 
+import { updateOwnName } from "../users.action";
 import type { UserProfile } from "../users.query";
 import { RoleTags } from "./role-tags";
 
@@ -21,6 +23,18 @@ export function ProfileView({ profile }: { profile: UserProfile }) {
   const { message } = App.useApp();
   const [form] = Form.useForm<PasswordValues>();
   const [saving, setSaving] = useState(false);
+  const [name, setName] = useState(profile.name);
+  const router = useRouter();
+
+  async function saveName(value: string) {
+    const next = value.trim();
+    if (!next || next === name) return;
+    const [saved, error] = await updateOwnName({ name: next });
+    if (error) return message.error(error.message);
+    setName(saved.name);
+    message.success("Đã cập nhật họ tên");
+    router.refresh();
+  }
 
   async function changePassword({ currentPassword, newPassword }: PasswordValues) {
     setSaving(true);
@@ -49,7 +63,18 @@ export function ProfileView({ profile }: { profile: UserProfile }) {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Thông tin tài khoản">
           <Descriptions column={1} size="small">
-            <Descriptions.Item label="Họ tên">{profile.name}</Descriptions.Item>
+            <Descriptions.Item label="Họ tên">
+              <Typography.Text
+                editable={{
+                  onChange: saveName,
+                  maxLength: 100,
+                  tooltip: "Sửa họ tên",
+                  triggerType: ["icon", "text"],
+                }}
+              >
+                {name}
+              </Typography.Text>
+            </Descriptions.Item>
             <Descriptions.Item label="Email">{profile.email}</Descriptions.Item>
             <Descriptions.Item label="Mã nhân viên">{profile.employeeCode}</Descriptions.Item>
             <Descriptions.Item label="Phòng ban">{profile.departmentName}</Descriptions.Item>

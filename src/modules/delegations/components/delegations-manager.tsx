@@ -11,14 +11,10 @@ import { PageHeader } from "@/shared/components/ui/page-header";
 import { formatDateTime } from "@/shared/libs/format.lib";
 
 import { cancelDelegation, createDelegation } from "../delegations.action";
+import { DELEGATION_STATUS_META } from "../delegations.constant";
 import type { DelegationRow } from "../delegations.query";
 
-const STATUS_META = {
-  ACTIVE: { label: "Đang hiệu lực", color: "success" },
-  UPCOMING: { label: "Sắp hiệu lực", color: "processing" },
-  EXPIRED: { label: "Hết hạn", color: "default" },
-  CANCELLED: { label: "Đã hủy", color: "default" },
-} as const;
+const STATUS_META = DELEGATION_STATUS_META;
 
 type Values = { delegateId: string; range: [Dayjs, Dayjs]; reason: string };
 

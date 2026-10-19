@@ -37,7 +37,7 @@ export function Sidebar({
       onCollapse={setCollapsed}
       theme="light"
       width={240}
-      className="!sticky top-0 hidden h-screen md:block"
+      className="!sticky top-0 hidden h-screen md:block print:!hidden"
       style={{ borderInlineEnd: `1px solid ${token.colorBorderSecondary}` }}
     >
       <div className="flex h-16 items-center px-6">

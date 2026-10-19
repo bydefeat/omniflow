@@ -13,7 +13,8 @@
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "test:e2e": "playwright test -c scripts/e2e",
-    "mail:flush": "tsx --env-file-if-exists=.env scripts/flush-mail.ts"
+    "mail:flush": "tsx --env-file-if-exists=.env scripts/flush-mail.ts",
+    "sla:remind": "tsx --env-file-if-exists=.env scripts/sla-reminders.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",

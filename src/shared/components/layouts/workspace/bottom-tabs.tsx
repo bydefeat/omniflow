@@ -31,6 +31,7 @@ export function BottomTabs({
   return (
     <>
       <nav
+        data-print-hidden
         className="fixed inset-x-0 bottom-0 z-30 flex md:hidden"
         style={{
           background: token.colorBgContainer,

@@ -10,6 +10,7 @@ const adminPages = [
   { path: "/administrator/reports", link: "Báo cáo" },
   { path: "/administrator/request-types", link: "Loại đơn" },
   { path: "/administrator/audit-log", link: "Nhật ký quản trị" },
+  { path: "/administrator/delegations", link: "Ủy quyền" },
 ];
 
 test("nhân viên mở trực tiếp trang quản trị thì bị chặn", async ({ browser }) => {
@@ -70,6 +71,8 @@ test("nhân viên gọi action quản trị đều bị từ chối", async () =
     ["saveFormSchema", { requestTypeId: "x", fields: [] }],
     ["saveApprovalSteps", { requestTypeId: "x", steps: [{ name: "Hack", approverType: "MANAGER", approverRole: null }] }],
     ["reassignApproval", { approvalId: "x", approverId: "x" }],
+    ["clearUserSignInLock", { userId: "x" }],
+    ["adminCancelDelegation", { id: "x" }],
   ];
   for (const [name, input] of calls) {
     const [, error] = await callAction(employee, name, input);

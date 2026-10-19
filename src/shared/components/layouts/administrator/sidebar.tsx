@@ -39,7 +39,7 @@ function AdministratorMenu({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AdministratorSidebar() {
   return (
-    <Layout.Sider width={248} className="!sticky top-0 z-30 !hidden h-screen lg:!block">
+    <Layout.Sider width={248} className="!sticky top-0 z-30 !hidden h-screen lg:!block print:!hidden">
       <div className="flex h-16 items-center px-6">
         <Link href="/administrator">
           <Logo inverted />

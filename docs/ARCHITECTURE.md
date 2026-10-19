@@ -70,10 +70,12 @@ src/
 │   │       │       └── steps/       # các bước duyệt theo thứ tự (kéo thả)               UC-10
 │   │       ├── requests/            # giám sát toàn bộ đơn, xem audit trail
 │   │       ├── reports/             # thống kê, tỷ lệ đúng SLA
+│   │       ├── delegations/         # tạo / hủy ủy quyền thay người duyệt vắng mặt
 │   │       └── audit-log/           # nhật ký thao tác quản trị (ai, lúc nào, đổi gì, IP)
 │   │
 │   └── api/
 │       ├── auth/[...all]/route.ts   # handler của better-auth
+│       ├── exports/requests/route.ts # xuất CSV danh sách đơn (chỉ admin)
 │       └── files/[fileId]/route.ts  # tải tệp đính kèm, kiểm tra quyền trước khi trả file
 │
 ├── modules/                         # NGHIỆP VỤ theo domain (bounded context), xem mục 3
@@ -133,6 +135,7 @@ Tên file dạng `<tên>.<loại>.ts`, phần `<tên>` viết kebab-case. Trong 
 | Store | `*.store.ts` | `sidebar.store.ts` | `useSidebarStore` |
 | Drizzle schema | `*.schema.ts` | `requests.schema.ts` | các bảng `requests`, `requestItems`... |
 | Zod schema | `*.validation.ts` | `requests.validation.ts` | `createRequestInput` |
+| Ghi thông báo (server, không phải action) | `*.notify.ts` | `approvals.notify.ts` | `notify`, `sendOverdueReminders` |
 | Query (đọc) | `*.query.ts` | `approvals.query.ts` | `getPendingApprovals()` |
 | Server action (ghi) | `*.action.ts` | `approvals.action.ts` | `approveRequest` |
 | Logic thuần | `*.service.ts` | `approvals.service.ts` | `resolveApprover()` |

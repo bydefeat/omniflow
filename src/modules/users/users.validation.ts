@@ -8,8 +8,12 @@ const nullableId = z
   .nullish()
   .transform((value) => value || null);
 
+const nameField = z.string().trim().min(1, "Vui lòng nhập họ tên").max(100, "Tối đa 100 ký tự");
+
+export const ownNameInput = z.object({ name: nameField });
+
 const userFields = {
-  name: z.string().trim().min(1, "Vui lòng nhập họ tên").max(100, "Tối đa 100 ký tự"),
+  name: nameField,
   employeeCode: z
     .string()
     .trim()

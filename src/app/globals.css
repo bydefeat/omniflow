@@ -5,3 +5,21 @@
 @theme inline {
   --font-sans: var(--font-inter);
 }
+
+/* In đơn (nút "In đơn" gọi window.print): chỉ giữ nội dung trang, bỏ khung portal và các nút thao tác. */
+@media print {
+  .ant-layout-sider,
+  .ant-layout-header,
+  [data-print-hidden] {
+    display: none !important;
+  }
+
+  main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .ant-card {
+    break-inside: avoid;
+  }
+}
