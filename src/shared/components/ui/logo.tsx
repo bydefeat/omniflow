@@ -1,3 +1,5 @@
+"use client";
+
 import { NodeIndexOutlined } from "@ant-design/icons";
 
 import { BRAND_COLORS } from "@/shared/constants/theme.constant";

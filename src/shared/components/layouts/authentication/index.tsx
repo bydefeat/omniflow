@@ -22,9 +22,7 @@ export function AuthenticationLayout({
             tảng minh bạch.
           </p>
         </div>
-        <p className="text-sm text-white/60">
-          © {new Date().getFullYear()} OmniFlow
-        </p>
+        <p className="text-sm text-white/60">© OmniFlow</p>
       </aside>
 
       <main className="flex flex-1 flex-col items-center justify-center px-4 py-12">
