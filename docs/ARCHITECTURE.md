@@ -161,6 +161,7 @@ CDM không có khóa ngoại (đúng chuẩn Merise). Khóa ngoại được th�
 **Giữa các module:** khác hcmue-portal (module không import module), OmniFlow cho phép import có giới hạn, vì quy trình duyệt phải ghi nhiều bảng trong **một transaction** (gửi đơn = đổi trạng thái đơn + tạo lượt duyệt cấp 1 + tạo thông báo). Ghép ở `app` thì không giữ được transaction.
 
 - Chỉ được import `*.schema.ts`, `*.query.ts`, `*.constant.ts`, `*.validation.ts` và `*.service.ts` của module khác. **Không** import `*.action.ts` hay `components/` của module khác.
+- Ngoại lệ đã biết: `hasPendingRequests()` trong `request-types.query.ts` đọc bảng `requests` bằng SQL thô (ngược chiều mũi tên) để khóa sửa bước duyệt khi còn đơn chờ. Chỉ đọc, không import code của `requests`.
 - Server action của module khác cần dùng trong component (ví dụ form tạo đơn ở `requests` cần `submitRequest` của `approvals`) thì page ở `app` truyền action đó xuống làm prop.
 - Chỉ import theo chiều mũi tên dưới đây (không vòng):
 
@@ -264,6 +265,7 @@ Mỗi folder chỉ export `index.tsx`. Menu lấy từ `shared/constants/navigat
 | Sau đăng nhập | `admin` → `/administrator`, còn lại → `/workspace/dashboard` (khai báo ở `role.constant.ts`) | |
 | Server action | ZSA: `createServerActionProcedure` cho session/role, `.input(zodSchema)` cho dữ liệu. Ngoại lệ: `uploadAttachment` là server action thường (tự kiểm phiên + zod, vẫn trả `[data, error]`) vì zsa `type: "formData"` hỏng với zod 4 | Validate và kiểm quyền một chỗ, lỗi trả về có kiểu |
 | Dữ liệu server | Mặc định: server component gọi `*.query.ts`. **TanStack Query chỉ dùng** cho dữ liệu client cần tự làm mới (chuông thông báo, số đơn chờ duyệt), `queryFn` gọi thẳng action zsa | Không đồng bộ một dữ liệu ở hai nơi khi không cần |
+| Múi giờ | Mọi ngày giờ hiển thị qua `format.lib.ts`, cố định `Asia/Ho_Chi_Minh` bằng `Intl.DateTimeFormat` | Server (thường chạy UTC) và trình duyệt ra cùng một chuỗi: đúng giờ Việt Nam và không lỗi hydration |
 | Component antd trong server component | Chỉ dùng export có tên (`Button`, `Tag`); không dùng `X.Y` (`Layout.Content`...) hay icon — đặt trong component `"use client"` | Từ server, client component chỉ là tham chiếu theo tên export; thuộc tính tĩnh thành `undefined` |
 | State UI | `zustand` chỉ giữ state UI (sidebar, bộ lọc đang chọn) | |
 | Bảng | antd `Table` cho mọi bảng danh sách. **TanStack Table** chỉ cho bảng hạng mục chi tiết sửa trực tiếp (thêm/xóa dòng, cột Thành tiền tự tính) | antd Table đủ cho bảng đọc; bảng sửa inline cần kiểm soát dòng/ô mà antd làm cồng kềnh |

@@ -290,7 +290,19 @@ Index: (`userId`, `readAt`).
 
 ## 4. Kiểm thử
 
-**Unit test** (`npm test`, `node:test` qua `tsx`): 16/16 qua cho `approvals.service.ts`.
+**Unit test** (`npm test`, `node:test` qua `tsx`): 20/20 qua — 16 cho `approvals.service.ts`, 4 cho `format.lib.ts` (chạy cả với `TZ=UTC` và `TZ=America/New_York`).
+
+**Kiểm tra toàn diện (2026-10-19), tất cả đều qua:**
+
+| Lớp | Kết quả |
+|---|---|
+| Dựng từ đầu | Database mới → `db:migrate` → `db:seed` → `db:seed -- --demo` (chạy 2 lần không tạo trùng) → `build` → `start` → 3 bộ kiểm thử đầu-cuối qua, log server 0 lỗi |
+| Tĩnh | `tsc`, `lint`, 0 comment, `drizzle-kit generate` không lệch schema, `drizzle-kit check` sạch |
+| Schema better-auth | So với `@better-auth/cli generate`: đủ cột, đúng tên; khác biệt có chủ đích (`timestamptz`, `employee_code` varchar unique, khóa ngoại) |
+| Kiến trúc | `shared` không import `modules` (trừ `db.lib`, `auth.lib`); không module nào import `action`/`components` của module khác; mọi cạnh import đi đúng chiều mũi tên |
+| Bảo mật | 27/27 server action có kiểm quyền (9 `adminProcedure`, 17 `authedProcedure`, 1 `getSession()`); mọi route portal chưa đăng nhập → 307 về sign-in, `api/files` → 401; không có `dangerouslySetInnerHTML`/`eval`/`any`; `.env` không vào git; `npm audit --omit=dev`: 0 lỗ hổng |
+
+Rà soát code lần này tìm và sửa thêm 3 lỗi: ngày giờ định dạng theo múi giờ của server (lệch 7 giờ và lỗi hydration khi deploy lên server UTC) → cố định `Asia/Ho_Chi_Minh`; `DndContext` sinh id khác nhau giữa server và trình duyệt → truyền `id` từ `useId()`; bản nháp thuộc loại đơn đã tắt mở ra trống trơn → hiện cảnh báo và chỉ cho xóa nháp.
 
 **Kiểm thử đầu-cuối trên production build** (`next build` + `next start`, gọi server action qua HTTP với header `Next-Action`, đăng nhập bằng tài khoản demo), cả ba bộ đều qua:
 
