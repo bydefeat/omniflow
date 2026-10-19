@@ -1,4 +1,5 @@
 export * from "@/modules/approvals/approvals.schema";
+export * from "@/modules/audit/audit.schema";
 export * from "@/modules/delegations/delegations.schema";
 export * from "@/modules/departments/departments.schema";
 export * from "@/modules/notifications/notifications.schema";

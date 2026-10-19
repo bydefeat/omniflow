@@ -32,7 +32,7 @@ export const notifications = pgTable(
     readAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
-  (t) => [index().on(t.userId, t.readAt)],
+  (t) => [index().on(t.userId, t.readAt), index().on(t.userId, t.createdAt)],
 );
 
 export const emailOutbox = pgTable(

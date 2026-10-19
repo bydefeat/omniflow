@@ -3,6 +3,7 @@
 import { Breadcrumb, Layout, theme } from "antd";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
 import { type ShellUser, UserAvatarMenu } from "@/shared/components/ui/user-avatar-menu";
 import { ADMINISTRATOR_NAV } from "@/shared/constants/navigation.constant";
@@ -10,7 +11,7 @@ import { findActiveItem } from "@/shared/libs/navigation.lib";
 
 import { AdministratorMobileMenu } from "./sidebar";
 
-export function AdministratorHeader({ user }: { user: ShellUser }) {
+export function AdministratorHeader({ user, extra }: { user: ShellUser; extra?: ReactNode }) {
   const pathname = usePathname();
   const { token } = theme.useToken();
 
@@ -43,7 +44,10 @@ export function AdministratorHeader({ user }: { user: ShellUser }) {
           ]}
         />
       </div>
-      <UserAvatarMenu user={user} portal="administrator" />
+      <div className="flex shrink-0 items-center gap-2">
+        {extra}
+        <UserAvatarMenu user={user} portal="administrator" />
+      </div>
     </Layout.Header>
   );
 }

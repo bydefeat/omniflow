@@ -13,7 +13,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "OmniFlow",
+  title: { default: "OmniFlow", template: "%s · OmniFlow" },
   description: "Hệ thống quản lý yêu cầu & phê duyệt nội bộ",
 };
 

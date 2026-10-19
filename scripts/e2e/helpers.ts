@@ -44,7 +44,7 @@ export async function signIn(context: APIRequestContext, email: string, password
       data: { email, password },
       headers: { origin: BASE_URL },
     });
-    if (response.status() !== 429) return response;
+    if (response.status() !== 429 || (await response.json()).code === "ACCOUNT_TEMPORARILY_LOCKED") return response;
     await new Promise((resolve) => setTimeout(resolve, 11_000));
   }
   throw new Error(`Sign-in for ${email} kept hitting the rate limit`);

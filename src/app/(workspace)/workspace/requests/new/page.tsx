@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { submitRequest } from "@/modules/approvals/approvals.action";
 import { listActiveRequestTypes } from "@/modules/request-types/request-types.query";
 import { RequestForm } from "@/modules/requests/components/request-form";
 import { PageHeader } from "@/shared/components/ui/page-header";
+
+export const metadata: Metadata = { title: "Tạo đề xuất" };
 
 export default async function NewRequestPage() {
   const types = await listActiveRequestTypes();

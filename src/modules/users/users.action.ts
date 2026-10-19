@@ -5,17 +5,19 @@ import { headers } from "next/headers";
 
 import { ROLES } from "@/shared/constants/role.constant";
 import { ActionError, roleProcedure } from "@/shared/libs/action.lib";
-import { auth } from "@/shared/libs/auth.lib";
+import { auth, clearSignInFailures } from "@/shared/libs/auth.lib";
 import { db } from "@/shared/libs/db.lib";
 import { PG_ERRORS, pgErrorCode } from "@/shared/libs/db-error.lib";
 import { serializeRoles } from "@/shared/libs/role.lib";
 
+import { diff, recordAudit } from "@/modules/audit/audit.service";
 import { departments } from "@/modules/departments/departments.schema";
 
 import { user } from "./users.schema";
 import {
   userBanInput,
   userCreateInput,
+  userIdInput,
   userPasswordInput,
   userUpdateInput,
 } from "./users.validation";
@@ -65,10 +67,20 @@ async function assertNoManagerCycle(tx: Tx, userId: string, managerId: string | 
   }
 }
 
+async function emailOf(id: string) {
+  const [row] = await db.select({ email: user.email }).from(user).where(eq(user.id, id));
+  return row?.email ?? "";
+}
+
+async function describeUser(id: string) {
+  const [row] = await db.select({ name: user.name, email: user.email }).from(user).where(eq(user.id, id));
+  return row ? `${row.name} <${row.email}>` : id;
+}
+
 export const createUser = adminProcedure
   .createServerAction()
   .input(userCreateInput)
-  .handler(async ({ input }) => {
+  .handler(async ({ input, ctx }) => {
     const [taken] = await db
       .select({ email: user.email, employeeCode: user.employeeCode })
       .from(user)
@@ -81,7 +93,7 @@ export const createUser = adminProcedure
     }
     await assertAssignable(db, input);
 
-    await auth.api.createUser({
+    const created = await auth.api.createUser({
       headers: await headers(),
       body: {
         email: input.email,
@@ -95,6 +107,17 @@ export const createUser = adminProcedure
         },
       },
     });
+    await recordAudit(db, ctx.user, {
+      action: "USER_CREATED",
+      targetType: "user",
+      targetId: created.user.id,
+      summary: `${input.name} <${input.email}> · ${input.employeeCode}`,
+      changes: {
+        roles: input.roles,
+        departmentId: input.departmentId,
+        managerId: input.managerId,
+      },
+    });
   });
 
 export const updateUser = adminProcedure
@@ -104,27 +127,54 @@ export const updateUser = adminProcedure
     if (input.id === ctx.user.id && !input.roles.includes(ROLES.ADMIN)) {
       throw new ActionError("UNPROCESSABLE_CONTENT", "Không thể tự gỡ vai trò quản trị của chính mình");
     }
-    await db.transaction(async (tx) => {
-      const [current] = await tx.select({ managerId: user.managerId }).from(user).where(eq(user.id, input.id));
+    const rolesChanged = await db.transaction(async (tx) => {
+      const [current] = await tx
+        .select({
+          name: user.name,
+          email: user.email,
+          employeeCode: user.employeeCode,
+          departmentId: user.departmentId,
+          managerId: user.managerId,
+          role: user.role,
+        })
+        .from(user)
+        .where(eq(user.id, input.id))
+        .for("update");
       if (!current) throw new ActionError("NOT_FOUND", "Không tìm thấy người dùng");
       await assertAssignable(tx, input, current.managerId);
       await assertNoManagerCycle(tx, input.id, input.managerId);
 
+      const next = {
+        name: input.name,
+        employeeCode: input.employeeCode,
+        departmentId: input.departmentId,
+        managerId: input.managerId,
+        role: serializeRoles(input.roles).join(","),
+      };
       await tx
         .update(user)
-        .set({
-          name: input.name,
-          employeeCode: input.employeeCode,
-          departmentId: input.departmentId,
-          managerId: input.managerId,
-          role: serializeRoles(input.roles).join(","),
-        })
+        .set(next)
         .where(eq(user.id, input.id))
         .catch((error) => {
           if (pgErrorCode(error) === PG_ERRORS.UNIQUE) throw new ActionError("CONFLICT", "Mã nhân viên đã tồn tại");
           throw error;
         });
+      const changes = diff(current, next);
+      if (Object.keys(changes).length > 0) {
+        await recordAudit(tx, ctx.user, {
+          action: "USER_UPDATED",
+          targetType: "user",
+          targetId: input.id,
+          summary: `${input.name} <${current.email}>: ${Object.keys(changes).join(", ")}`,
+          changes,
+        });
+      }
+      return "role" in changes;
     });
+    // Sign the user out everywhere so tabs opened under the old role cannot keep acting on stale screens.
+    if (rolesChanged && input.id !== ctx.user.id) {
+      await auth.api.revokeUserSessions({ headers: await headers(), body: { userId: input.id } });
+    }
   });
 
 export const setUserBanned = adminProcedure
@@ -142,7 +192,29 @@ export const setUserBanned = adminProcedure
       });
     } else {
       await auth.api.unbanUser({ headers: requestHeaders, body: { userId: input.userId } });
+      await clearSignInFailures(await emailOf(input.userId));
     }
+    await recordAudit(db, ctx.user, {
+      action: input.banned ? "USER_LOCKED" : "USER_UNLOCKED",
+      targetType: "user",
+      targetId: input.userId,
+      summary: `${await describeUser(input.userId)}${input.banned && input.reason ? ` · ${input.reason}` : ""}`,
+    });
+  });
+
+export const clearUserSignInLock = adminProcedure
+  .createServerAction()
+  .input(userIdInput)
+  .handler(async ({ input, ctx }) => {
+    const email = await emailOf(input.userId);
+    if (!email) throw new ActionError("NOT_FOUND", "Không tìm thấy người dùng");
+    await clearSignInFailures(email);
+    await recordAudit(db, ctx.user, {
+      action: "USER_SIGN_IN_UNLOCKED",
+      targetType: "user",
+      targetId: input.userId,
+      summary: await describeUser(input.userId),
+    });
   });
 
 export const setUserPassword = adminProcedure
@@ -159,4 +231,11 @@ export const setUserPassword = adminProcedure
     } else {
       await auth.api.revokeUserSessions({ headers: requestHeaders, body: { userId: input.userId } });
     }
+    await clearSignInFailures(await emailOf(input.userId));
+    await recordAudit(db, ctx.user, {
+      action: "USER_PASSWORD_SET",
+      targetType: "user",
+      targetId: input.userId,
+      summary: await describeUser(input.userId),
+    });
   });

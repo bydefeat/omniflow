@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { forbidden } from "next/navigation";
 
 import { DelegationsManager } from "@/modules/delegations/components/delegations-manager";
 import { canDelegate, hasReceivedDelegations, listMyDelegations } from "@/modules/delegations/delegations.query";
 import { listUserOptions } from "@/modules/users/users.query";
 import { requireSession } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Ủy quyền" };
 
 export default async function DelegationsPage() {
   const { user } = await requireSession();

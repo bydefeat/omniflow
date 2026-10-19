@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Button } from "antd";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -10,6 +11,8 @@ import { RequestDetail } from "@/modules/requests/components/request-detail";
 import { getRequestDetail } from "@/modules/requests/requests.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { requireSession } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Chi tiết đơn" };
 
 export default async function RequestPage({ params }: PageProps<"/workspace/requests/[requestId]">) {
   const { requestId } = await params;

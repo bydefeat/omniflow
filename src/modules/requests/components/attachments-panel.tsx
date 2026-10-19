@@ -1,7 +1,7 @@
 "use client";
 
 import { DeleteOutlined, InboxOutlined, PaperClipOutlined } from "@ant-design/icons";
-import { Alert, App, Button, Popconfirm, Upload } from "antd";
+import { Alert, App, Button, Popconfirm, Tag, Upload } from "antd";
 import { useState } from "react";
 
 import { deleteAttachment, uploadAttachment } from "../requests.action";
@@ -12,6 +12,7 @@ export type AttachmentItem = {
   id: string;
   fileName: string;
   sizeBytes: number;
+  removedAt?: Date | null;
 };
 
 type Props = {
@@ -80,10 +81,11 @@ export function AttachmentsPanel({ requestId, attachments, editable = false }: P
                 href={`/api/files/${item.id}`}
                 target="_blank"
                 rel="noreferrer"
-                className="min-w-0 flex-1 truncate"
+                className={`min-w-0 flex-1 truncate ${item.removedAt ? "text-black/45 line-through" : ""}`}
               >
                 {item.fileName}
               </a>
+              {item.removedAt && <Tag className="!m-0">Đã gỡ khi bổ sung</Tag>}
               <span className="text-xs whitespace-nowrap text-black/45">{formatFileSize(item.sizeBytes)}</span>
               {editable && (
                 <Popconfirm title="Xóa tệp này?" okText="Xóa" cancelText="Hủy" onConfirm={() => remove(item)}>

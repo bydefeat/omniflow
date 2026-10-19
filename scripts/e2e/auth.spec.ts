@@ -69,9 +69,64 @@ test("không có luồng đăng ký: API sign-up bị chặn, không có trang h
   expect(await sql`select id from "user" where email = ${email}`).toHaveLength(0);
 
   await page.goto("/authentication/sign-up");
-  await expect(page.getByText(/404|could not be found/i).first()).toBeVisible();
+  await expect(page.getByText("Không tìm thấy trang")).toBeVisible();
 
   await page.goto("/authentication/sign-in");
   await expect(page.getByRole("button", { name: "Đăng nhập" })).toBeVisible();
   await expect(page.getByText(/đăng ký|sign up/i)).toHaveCount(0);
+});
+
+test("đăng nhập sai 5 lần thì tài khoản bị khóa tạm, admin đặt lại mật khẩu thì mở khóa, đổi vai trò thì phiên cũ bị đăng xuất", async () => {
+  const admin = await apiAs("admin");
+  const [department] = await sql`select id from departments where code = 'PB_IT'`;
+  const email = `lockout.${Date.now()}@omniflow.local`;
+  const [, createError] = await callAction(admin, "createUser", {
+    email,
+    password: "Matkhau@123",
+    name: "Thử khóa tạm",
+    employeeCode: `LCK${Date.now() % 1_000_000}`,
+    departmentId: department.id,
+    managerId: null,
+    roles: [],
+  });
+  expect(createError).toBeNull();
+  const [created] = await sql`select id from "user" where email = ${email}`;
+  const client = await request.newContext({ baseURL: BASE_URL });
+  try {
+    const [, weakError] = await callAction(admin, "setUserPassword", { userId: created.id, newPassword: "12345678901" });
+    expect(weakError?.code).toBe("INPUT_PARSE_ERROR");
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      expect((await signIn(client, email, `Sai${attempt}@matkhau`)).status()).toBe(401);
+    }
+    const locked = await signIn(client, email, "Matkhau@123");
+    expect(locked.status()).toBe(429);
+    expect(await locked.json()).toMatchObject({ code: "ACCOUNT_TEMPORARILY_LOCKED" });
+
+    const [lockedRow] = await sql`select failures from sign_in_failures where email = ${email}`;
+    expect(lockedRow.failures).toBeGreaterThan(5);
+    expect((await callAction(admin, "clearUserSignInLock", { userId: created.id }))[1]).toBeNull();
+    expect((await signIn(client, email, "Matkhau@123")).status()).toBe(200);
+    for (let attempt = 0; attempt < 5; attempt++) await signIn(client, email, `Lai${attempt}@matkhau`);
+
+    expect((await callAction(admin, "setUserPassword", { userId: created.id, newPassword: "Matkhau@456" }))[1]).toBeNull();
+    expect(await sql`select email from sign_in_failures where email = ${email}`).toHaveLength(0);
+    expect((await signIn(client, email, "Matkhau@456")).status()).toBe(200);
+    expect((await callAction(client, "getMyPendingApprovalCount"))[1]).toBeNull();
+
+    const [, roleError] = await callAction(admin, "updateUser", {
+      id: created.id,
+      name: "Thử khóa tạm",
+      employeeCode: `LCK${Date.now() % 1_000_000}`,
+      departmentId: department.id,
+      managerId: null,
+      roles: ["accountant"],
+    });
+    expect(roleError).toBeNull();
+    expect((await callAction(client, "getMyPendingApprovalCount"))[1]?.code).toBe("NOT_AUTHORIZED");
+  } finally {
+    await client.dispose();
+    await sql`delete from "user" where id = ${created.id}`;
+    await sql`delete from sign_in_failures where email = ${email}`;
+  }
 });

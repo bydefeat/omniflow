@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 import { departments } from "@/modules/departments/departments.schema";
 import { requestTypes } from "@/modules/request-types/request-types.schema";
@@ -7,7 +7,7 @@ import { db } from "@/shared/libs/db.lib";
 import { escapeLike, PAGE_SIZE } from "@/shared/libs/list-params.lib";
 
 import type { RequestStatus } from "./requests.constant";
-import { attachments, requestItems, requests } from "./requests.schema";
+import { attachments, requestItems, requestRevisions, requests } from "./requests.schema";
 
 const attachmentColumns = {
   id: attachments.id,
@@ -15,9 +15,10 @@ const attachmentColumns = {
   mimeType: attachments.mimeType,
   sizeBytes: attachments.sizeBytes,
   uploadedAt: attachments.uploadedAt,
+  removedAt: attachments.removedAt,
 };
 
-async function loadChildren(requestId: string) {
+async function loadChildren(requestId: string, { withRemoved }: { withRemoved: boolean }) {
   const [items, files] = await Promise.all([
     db
       .select({
@@ -34,7 +35,7 @@ async function loadChildren(requestId: string) {
     db
       .select(attachmentColumns)
       .from(attachments)
-      .where(eq(attachments.requestId, requestId))
+      .where(and(eq(attachments.requestId, requestId), withRemoved ? undefined : isNull(attachments.removedAt)))
       .orderBy(asc(attachments.uploadedAt)),
   ]);
   return { items, attachments: files };
@@ -62,7 +63,7 @@ export async function getDraftForEdit(requestId: string, userId: string) {
       ),
     );
   if (!request) return null;
-  return { ...request, ...(await loadChildren(requestId)) };
+  return { ...request, ...(await loadChildren(requestId, { withRemoved: false })) };
 }
 
 export type DraftForEdit = NonNullable<Awaited<ReturnType<typeof getDraftForEdit>>>;
@@ -101,7 +102,12 @@ export async function getRequestDetail(requestId: string) {
     ...rest,
     formSchema: snapshot?.formSchema ?? typeFormSchema,
     hasLineItems: snapshot?.hasLineItems ?? typeHasLineItems,
-    ...(await loadChildren(requestId)),
+    ...(await loadChildren(requestId, { withRemoved: true })),
+    revisions: await db
+      .select()
+      .from(requestRevisions)
+      .where(eq(requestRevisions.requestId, requestId))
+      .orderBy(desc(requestRevisions.revision)),
   };
 }
 

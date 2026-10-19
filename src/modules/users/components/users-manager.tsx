@@ -33,8 +33,9 @@ import {
   ROLES,
 } from "@/shared/constants/role.constant";
 import { parseRoles } from "@/shared/libs/role.lib";
+import { PASSWORD_HINT, passwordFormRule } from "@/shared/libs/password.lib";
 
-import { createUser, setUserBanned, setUserPassword, updateUser } from "../users.action";
+import { clearUserSignInLock, createUser, setUserBanned, setUserPassword, updateUser } from "../users.action";
 import type { UserFilters, UserOption, UserRow } from "../users.query";
 import type { UserCreateValues } from "../users.validation";
 import { RoleTags } from "./role-tags";
@@ -97,6 +98,13 @@ export function UsersManager({ users, total, filters, managers, departments, cur
     const [, error] = await setUserBanned({ userId: row.id, banned: !row.banned });
     if (error) return message.error(error.message);
     message.success(row.banned ? "Đã mở khóa tài khoản" : "Đã khóa tài khoản");
+    router.refresh();
+  }
+
+  async function clearSignInLock(row: UserRow) {
+    const [, error] = await clearUserSignInLock({ userId: row.id });
+    if (error) return message.error(error.message);
+    message.success(`Đã gỡ khóa tạm đăng nhập cho ${row.name}`);
     router.refresh();
   }
 
@@ -195,9 +203,25 @@ export function UsersManager({ users, total, filters, managers, departments, cur
           {
             title: "Trạng thái",
             dataIndex: "banned",
-            width: 110,
-            render: (banned) =>
-              banned ? <Tag color="error">Đã khóa</Tag> : <Tag color="success">Hoạt động</Tag>,
+            width: 150,
+            render: (banned, row) => (
+              <Space size={4} wrap>
+                {banned ? <Tag color="error">Đã khóa</Tag> : <Tag color="success">Hoạt động</Tag>}
+                {row.signInLocked && (
+                  <Popconfirm
+                    title="Gỡ khóa tạm đăng nhập?"
+                    description="Tài khoản bị khóa tạm do đăng nhập sai nhiều lần."
+                    okText="Gỡ khóa"
+                    cancelText="Hủy"
+                    onConfirm={() => clearSignInLock(row)}
+                  >
+                    <Button size="small" color="orange" variant="outlined">
+                      Tạm khóa đăng nhập · Gỡ
+                    </Button>
+                  </Popconfirm>
+                )}
+              </Space>
+            ),
           },
           {
             key: "actions",
@@ -206,12 +230,13 @@ export function UsersManager({ users, total, filters, managers, departments, cur
             render: (_, row) => (
               <Space size={4}>
                 <Tooltip title="Sửa">
-                  <Button type="text" icon={<EditOutlined />} onClick={() => openForm(row)} />
+                  <Button type="text" icon={<EditOutlined />} aria-label={`Sửa ${row.name}`} onClick={() => openForm(row)} />
                 </Tooltip>
                 <Tooltip title="Đặt mật khẩu">
                   <Button
                     type="text"
                     icon={<KeyOutlined />}
+                    aria-label={`Đặt mật khẩu cho ${row.name}`}
                     onClick={() => {
                       passwordForm.resetFields();
                       setPasswordFor(row);
@@ -232,6 +257,7 @@ export function UsersManager({ users, total, filters, managers, departments, cur
                       danger={!row.banned}
                       disabled={row.id === currentUserId}
                       icon={row.banned ? <UnlockOutlined /> : <LockOutlined />}
+                      aria-label={`${row.banned ? "Mở khóa" : "Khóa"} ${row.name}`}
                     />
                   </Tooltip>
                 </Popconfirm>
@@ -279,9 +305,10 @@ export function UsersManager({ users, total, filters, managers, departments, cur
               <Form.Item
                 name="password"
                 label="Mật khẩu tạm"
+                extra={PASSWORD_HINT}
                 rules={[
                   { required: true, message: "Vui lòng nhập mật khẩu" },
-                  { min: 8, message: "Tối thiểu 8 ký tự" },
+                  passwordFormRule,
                 ]}
               >
                 <Input.Password autoComplete="new-password" />
@@ -325,9 +352,10 @@ export function UsersManager({ users, total, filters, managers, departments, cur
           <Form.Item
             name="newPassword"
             label="Mật khẩu mới"
+            extra={PASSWORD_HINT}
             rules={[
               { required: true, message: "Vui lòng nhập mật khẩu" },
-              { min: 8, message: "Tối thiểu 8 ký tự" },
+              passwordFormRule,
             ]}
           >
             <Input.Password autoComplete="new-password" />

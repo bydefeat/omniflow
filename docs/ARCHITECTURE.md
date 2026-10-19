@@ -69,7 +69,8 @@ src/
 │   │       │       ├── form/        # cấu hình trường nhập liệu động (kéo thả)           UC-09
 │   │       │       └── steps/       # các bước duyệt theo thứ tự (kéo thả)               UC-10
 │   │       ├── requests/            # giám sát toàn bộ đơn, xem audit trail
-│   │       └── reports/             # thống kê, tỷ lệ đúng SLA
+│   │       ├── reports/             # thống kê, tỷ lệ đúng SLA
+│   │       └── audit-log/           # nhật ký thao tác quản trị (ai, lúc nào, đổi gì, IP)
 │   │
 │   └── api/
 │       ├── auth/[...all]/route.ts   # handler của better-auth
@@ -83,7 +84,8 @@ src/
 │   ├── requests/                    #   requests.query.ts       hàm đọc dữ liệu (server)
 │   ├── approvals/                   #   requests.action.ts      server action (action.lib.ts)
 │   ├── delegations/                 #   requests.constant.ts    nhãn + màu trạng thái
-│   └── notifications/               #   components/             UI riêng của module
+│   ├── notifications/               #   components/             UI riêng của module
+│   └── audit/                       # nhật ký quản trị: recordAudit() ghi trong cùng transaction
 │
 └── shared/                          # KHÔNG chứa nghiệp vụ; ai cũng import được
     ├── components/
@@ -149,10 +151,11 @@ Ngoại lệ: file mà Next.js quy định tên (`proxy.ts`, `layout.tsx`, `page
 | `departments` | PHONG_BAN | `departments` | quản lý phòng ban |
 | `users` | NGUOI_DUNG, VAI_TRO | mở rộng bảng `user` của better-auth: `departmentId`, `managerId`, `status`. Vai trò dùng trường `role` của plugin `admin` | UC-01, quản lý tài khoản |
 | `request-types` | LOAI_YEU_CAU, BUOC_DUYET | `requestTypes`, `approvalSteps` | UC-09, UC-10 |
-| `requests` | DON_YEU_CAU, HANG_MUC_CHI_TIET, TEP_DINH_KEM | `requests`, `requestItems`, `attachments` | UC-02, UC-03 |
+| `requests` | DON_YEU_CAU, HANG_MUC_CHI_TIET, TEP_DINH_KEM | `requests`, `requestItems`, `attachments`, `requestRevisions` (bản chụp nội dung mỗi lần bị trả về bổ sung; tệp đã gửi chỉ gỡ mềm bằng `removedAt`) | UC-02, UC-03 |
 | `approvals` | LUOT_PHE_DUYET | `approvals` | UC-04 → UC-07, chuyển trạng thái đơn |
 | `delegations` | UY_QUYEN | `delegations` | UC-08 |
 | `notifications` | (không có trong CDM, từ UC-01) | `notifications` | UC-01 |
+| `audit` | (không có trong CDM, yêu cầu vận hành) | `audit_logs` | nhật ký thao tác quản trị |
 
 `MatKhau` của NGUOI_DUNG không nằm trong bảng `user`: better-auth lưu mật khẩu đã băm ở bảng `account`.
 
@@ -176,6 +179,7 @@ departments ← users ← request-types ← requests ← approvals
                            notifications ←──────────┘
 ```
 
+- `audit` là module lá: không import module nào (`actor_id` không có khóa ngoại để tránh vòng `users` ↔ `audit`), mọi module có thao tác quản trị đều được gọi `recordAudit()` trong `audit.service.ts`, truyền `tx` để nhật ký và thay đổi cùng commit hoặc cùng rollback.
 - Cần dữ liệu chéo chỉ để **hiển thị** (ví dụ trang chi tiết đơn = thông tin đơn + dòng thời gian duyệt) thì vẫn để `app` ghép: page gọi `getRequest()` của `requests` và `getApprovalTimeline()` của `approvals`.
 
 ### Quy trình duyệt (module `approvals`)
@@ -271,7 +275,7 @@ Mỗi folder chỉ export `index.tsx`. Menu lấy từ `shared/constants/navigat
 | Root layout | Chỉ 1 file `app/layout.tsx` | Nhiều root layout thì chuyển portal phải tải lại toàn trang |
 | Theme | 1 `ConfigProvider` ở root đọc `theme.constant.ts`; layout cần chỉnh thì lồng `ConfigProvider` con | Màu chỉ khai báo một chỗ |
 | Slug URL | Tiếng Anh (`/workspace/requests`) | Đồng bộ với tên code |
-| Phân quyền | 2 lớp: `authentication.proxy.ts` chỉ xem có cookie session; `layout.tsx` gọi `requireRole()` kiểm tra session thật. Action kiểm tra lại qua `authedProcedure` / `roleProcedure` | Proxy chỉ làm việc nhẹ; action là API công khai nên phải tự kiểm tra |
+| Phân quyền | 3 lớp: `authentication.proxy.ts` chỉ xem có cookie session; `layout.tsx` gọi `requireRole()` để dựng khung portal; **mỗi `page.tsx` tự gọi `requireRole()` / kiểm tra quyền** trước khi đọc dữ liệu. Action kiểm tra lại qua `authedProcedure` / `roleProcedure` | Khi điều hướng phía client, Next 16 chỉ render segment thay đổi nên layout không chạy lại: chỉ kiểm ở layout thì người có cookie hợp lệ phát lại request RSC của trang quản trị là đọc được dữ liệu (`authz.spec.ts` tái hiện). Action là API công khai nên phải tự kiểm tra |
 | Vai trò | Plugin `admin` của better-auth, một user nhiều role (`employee`, `approver`, `admin`). Mọi tài khoản đều có `employee` | Đúng quan hệ kế thừa ở docs.md 2.1. Admin cũng tạo đơn được |
 | Quyền mục Phê duyệt | `canAccessApprovals()` đặt ở `approvals.query.ts`, không ở `shared` | Phụ thuộc dữ liệu ủy quyền, là nghiệp vụ |
 | Sau đăng nhập | `admin` → `/administrator`, còn lại → `/workspace/dashboard` (khai báo ở `role.constant.ts`) | |

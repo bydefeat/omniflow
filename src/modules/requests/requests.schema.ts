@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   index,
+  uniqueIndex,
   integer,
   jsonb,
   numeric,
@@ -106,11 +107,35 @@ export const attachments = pgTable(
       .notNull()
       .references(() => user.id),
     uploadedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    removedAt: timestamp({ withTimezone: true }),
+    removedById: text().references(() => user.id),
   },
   (t) => [
     index().on(t.requestId),
     check("attachments_size_positive", sql`${t.sizeBytes} > 0`),
   ],
+);
+
+export type RevisionItem = { name: string; unit: string; quantity: string; unitPrice: string; amount: string | null };
+export type RevisionAttachment = { id: string; fileName: string; sizeBytes: number };
+
+export const requestRevisions = pgTable(
+  "request_revisions",
+  {
+    id: id(),
+    requestId: text()
+      .notNull()
+      .references(() => requests.id, { onDelete: "cascade" }),
+    revision: integer().notNull(),
+    title: varchar({ length: 200 }).notNull(),
+    reason: text().notNull(),
+    formData: jsonb().$type<Record<string, unknown>>().notNull(),
+    totalAmount: numeric({ precision: 18, scale: 2 }),
+    items: jsonb().$type<RevisionItem[]>().notNull(),
+    attachments: jsonb().$type<RevisionAttachment[]>().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex().on(t.requestId, t.revision)],
 );
 
 export const requestCounters = pgTable("request_counters", {

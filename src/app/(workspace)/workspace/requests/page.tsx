@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Button } from "antd";
 import Link from "next/link";
 
@@ -7,6 +8,8 @@ import { readRequestFilters } from "@/modules/requests/requests.constant";
 import { searchRequests } from "@/modules/requests/requests.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { requireSession } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Đơn của tôi" };
 
 export default async function MyRequestsPage({ searchParams }: PageProps<"/workspace/requests">) {
   const filters = readRequestFilters(await searchParams);

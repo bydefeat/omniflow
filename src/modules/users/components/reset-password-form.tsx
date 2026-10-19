@@ -8,6 +8,7 @@ import { useState } from "react";
 
 import { SIGN_IN_PATH } from "@/shared/constants/role.constant";
 import { authClient } from "@/shared/libs/auth-client.lib";
+import { PASSWORD_HINT, passwordFormRule } from "@/shared/libs/password.lib";
 
 type Values = { newPassword: string; confirmPassword: string };
 
@@ -39,7 +40,11 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
     });
     setLoading(false);
     if (error) {
-      setError("Liên kết đã hết hạn hoặc không hợp lệ. Vui lòng gửi lại.");
+      setError(
+        error.code === "WEAK_PASSWORD"
+          ? (error.message ?? PASSWORD_HINT)
+          : "Liên kết đã hết hạn hoặc không hợp lệ. Vui lòng gửi lại.",
+      );
       return;
     }
     message.success("Đã đặt lại mật khẩu. Vui lòng đăng nhập lại.");
@@ -52,7 +57,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
         Đặt lại mật khẩu
       </Typography.Title>
       <Typography.Paragraph type="secondary" className="!mb-8">
-        Mật khẩu mới tối thiểu 8 ký tự.
+        Mật khẩu mới: {PASSWORD_HINT.toLowerCase()}.
       </Typography.Paragraph>
 
       {error && <Alert type="error" title={error} className="!mb-6" showIcon />}
@@ -66,9 +71,10 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
         <Form.Item
           name="newPassword"
           label="Mật khẩu mới"
+          extra={PASSWORD_HINT}
           rules={[
             { required: true, message: "Vui lòng nhập mật khẩu mới" },
-            { min: 8, message: "Tối thiểu 8 ký tự" },
+            passwordFormRule,
           ]}
         >
           <Input.Password prefix={<LockOutlined />} autoComplete="new-password" />

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { resubmitRequest, submitRequest } from "@/modules/approvals/approvals.action";
@@ -10,6 +11,8 @@ import { RequestForm } from "@/modules/requests/components/request-form";
 import { getDraftForEdit } from "@/modules/requests/requests.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { requireSession } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Sửa đơn" };
 
 export default async function EditDraftPage({ params }: PageProps<"/workspace/requests/[requestId]/edit">) {
   const { requestId } = await params;

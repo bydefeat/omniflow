@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Role } from "@/shared/constants/role.constant";
 import { hasRole } from "@/shared/libs/role.lib";
 import { getSession } from "@/shared/libs/session.lib";
+import { logger } from "@/shared/libs/logger.lib";
 
 export type ActionErrorCode =
   | "INPUT_PARSE_ERROR"
@@ -68,7 +69,7 @@ async function run<Ctx, Input, Output>(
   } catch (error) {
     unstable_rethrow(error);
     if (error instanceof ActionError) return [null, { code: error.code, message: error.message }];
-    console.error("[action]", error);
+    logger.error("action.failed", { error });
     return [null, { code: "INTERNAL_SERVER_ERROR", message: "Đã có lỗi xảy ra, vui lòng thử lại" }];
   }
 }

@@ -1,17 +1,89 @@
 "use client";
 
-import { Card, Empty, Table, Tag } from "antd";
+import { Card, Checkbox, Empty, Input, Pagination, Select, Table, Tag } from "antd";
 import Link from "next/link";
 
+import { useListFilters } from "@/shared/hooks/list-filters.hook";
 import { formatDateTime, formatMoney } from "@/shared/libs/format.lib";
+import { PAGE_SIZE } from "@/shared/libs/list-params.lib";
 
-import type { PendingApprovalRow } from "../approvals.query";
+import { PENDING_SCOPE_OPTIONS } from "../approvals.constant";
+import type { PendingApprovalRow, PendingFilters } from "../approvals.query";
 
-export function PendingApprovalsTable({ rows }: { rows: PendingApprovalRow[] }) {
-  if (rows.length === 0) {
-    return <Empty className="!py-12" description="Không có đơn nào đang chờ bạn duyệt" />;
-  }
+type Props = {
+  rows: PendingApprovalRow[];
+  total: number;
+  hasDelegators: boolean;
+  filters: PendingFilters;
+  types: { id: string; name: string }[];
+};
 
+export function PendingApprovalsTable({ rows, total, hasDelegators, filters, types }: Props) {
+  const { update, pending } = useListFilters(filters);
+  const filtered = Boolean(filters.q || filters.typeId || filters.scope || filters.overdue);
+  const pagination = {
+    current: filters.page,
+    pageSize: PAGE_SIZE,
+    total,
+    hideOnSinglePage: true,
+    showSizeChanger: false,
+    onChange: (page: number) => update({ page }),
+  };
+
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Input.Search
+          allowClear
+          placeholder="Tìm theo mã, tiêu đề, người đề xuất"
+          className="!w-full sm:!w-72"
+          defaultValue={filters.q}
+          onSearch={(q) => update({ q })}
+        />
+        <Select
+          allowClear
+          placeholder="Loại đơn"
+          className="w-full sm:w-56"
+          value={filters.typeId}
+          onChange={(typeId) => update({ typeId })}
+          options={types.map((t) => ({ value: t.id, label: t.name }))}
+        />
+        {(hasDelegators || filters.scope) && (
+          <Select
+            allowClear
+            placeholder="Nguồn giao duyệt"
+            className="w-full sm:w-56"
+            value={filters.scope}
+            onChange={(scope) => update({ scope })}
+            options={[...PENDING_SCOPE_OPTIONS]}
+          />
+        )}
+        <Checkbox checked={!!filters.overdue} onChange={(e) => update({ overdue: e.target.checked ? "1" : undefined })}>
+          Chỉ đơn quá hạn
+        </Checkbox>
+      </div>
+
+      {total === 0 && !pending ? (
+        <Empty
+          className="!py-12"
+          description={filtered ? "Không có đơn chờ duyệt khớp bộ lọc" : "Không có đơn nào đang chờ bạn duyệt"}
+        />
+      ) : (
+        <PendingApprovalsList rows={rows} pending={pending} pagination={pagination} />
+      )}
+    </>
+  );
+}
+
+function PendingApprovalsList({
+  rows,
+  pending,
+  pagination,
+}: {
+  rows: PendingApprovalRow[];
+  pending: boolean;
+  pagination: { current: number; pageSize: number; total: number; hideOnSinglePage: boolean; onChange: (page: number) => void };
+}) {
   return (
     <>
       <div className="space-y-3 md:hidden">
@@ -42,14 +114,16 @@ export function PendingApprovalsTable({ rows }: { rows: PendingApprovalRow[] }) 
             </Card>
           </Link>
         ))}
+        <Pagination {...pagination} align="center" size="small" />
       </div>
       <div className="hidden md:block">
         <Table
           rowKey="approvalId"
           size="small"
           dataSource={rows}
+          loading={pending}
           scroll={{ x: 960 }}
-          pagination={{ pageSize: 20, hideOnSinglePage: true }}
+          pagination={{ ...pagination, showSizeChanger: false }}
           rowClassName={(row) => (row.overdue ? "bg-red-50" : "")}
           columns={[
             {

@@ -5,6 +5,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   varchar,
@@ -106,3 +107,15 @@ export const rateLimit = pgTable("rate_limit", {
   count: integer().notNull(),
   lastRequest: bigint({ mode: "number" }).notNull(),
 });
+
+export const signInFailures = pgTable(
+  "sign_in_failures",
+  {
+    email: varchar({ length: 255 }).notNull(),
+    // Empty when the client IP is unknown (no trusted proxy header configured).
+    ipAddress: varchar({ length: 64 }).notNull(),
+    failures: integer().notNull(),
+    firstFailedAt: timestamp({ withTimezone: true }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.email, t.ipAddress] })],
+);

@@ -1,23 +1,74 @@
 "use client";
 
-import { Empty, Table, Tag } from "antd";
+import { Empty, Input, Select, Table, Tag } from "antd";
 import Link from "next/link";
 
+import { useListFilters } from "@/shared/hooks/list-filters.hook";
 import { formatDateTime } from "@/shared/libs/format.lib";
+import { PAGE_SIZE } from "@/shared/libs/list-params.lib";
 
-import { APPROVAL_RESULT_META } from "../approvals.constant";
-import type { ApprovalHistoryRow } from "../approvals.query";
+import { APPROVAL_RESULT_META, HISTORY_RESULTS } from "../approvals.constant";
+import type { ApprovalHistoryRow, HistoryFilters } from "../approvals.query";
 
-export function ApprovalHistoryTable({ rows }: { rows: ApprovalHistoryRow[] }) {
-  if (rows.length === 0) return <Empty className="!py-12" description="Bạn chưa xử lý lượt duyệt nào" />;
+type Props = { rows: ApprovalHistoryRow[]; total: number; filters: HistoryFilters };
 
+export function ApprovalHistoryTable({ rows, total, filters }: Props) {
+  const { update, pending } = useListFilters(filters);
+  const filtered = Boolean(filters.q || filters.result);
+
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Input.Search
+          allowClear
+          placeholder="Tìm theo mã, tiêu đề, người đề xuất"
+          className="!w-full sm:!w-72"
+          defaultValue={filters.q}
+          onSearch={(q) => update({ q })}
+        />
+        <Select
+          allowClear
+          placeholder="Kết quả"
+          className="w-full sm:w-48"
+          value={filters.result}
+          onChange={(result) => update({ result })}
+          options={HISTORY_RESULTS.map((r) => ({ value: r, label: APPROVAL_RESULT_META[r].label }))}
+        />
+      </div>
+      {total === 0 && !pending ? (
+        <Empty
+          className="!py-12"
+          description={filtered ? "Không có lượt duyệt khớp bộ lọc" : "Bạn chưa xử lý lượt duyệt nào"}
+        />
+      ) : (
+        <HistoryTable rows={rows} total={total} filters={filters} pending={pending} onPage={(page) => update({ page })} />
+      )}
+    </>
+  );
+}
+
+function HistoryTable({
+  rows,
+  total,
+  filters,
+  pending,
+  onPage,
+}: Props & { pending: boolean; onPage: (page: number) => void }) {
   return (
     <Table
       rowKey="approvalId"
       size="small"
       dataSource={rows}
+      loading={pending}
       scroll={{ x: 960 }}
-      pagination={{ pageSize: 20, hideOnSinglePage: true }}
+      pagination={{
+        current: filters.page,
+        pageSize: PAGE_SIZE,
+        total,
+        hideOnSinglePage: true,
+        showSizeChanger: false,
+        onChange: onPage,
+      }}
       columns={[
         {
           title: "Mã đơn",

@@ -29,7 +29,9 @@ export function SignInForm({ callbackPath }: { callbackPath: string | null }) {
       setLoading(false);
       setError(
         ERROR_MESSAGES[error.code ?? ""] ??
-          "Không thể đăng nhập. Vui lòng thử lại.",
+          (error.status === 429 && error.message
+            ? error.message
+            : "Không thể đăng nhập. Vui lòng thử lại."),
       );
       return;
     }

@@ -1,13 +1,21 @@
 "use server";
 
-import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { after } from "next/server";
 
+import { recordAudit } from "@/modules/audit/audit.service";
 import { getActiveDelegates } from "@/modules/delegations/delegations.query";
 import { notifications } from "@/modules/notifications/notifications.schema";
 import { approvalSteps, requestTypes } from "@/modules/request-types/request-types.schema";
 import { buildFormValidator } from "@/modules/request-types/request-types.validation";
-import { requestCounters, requestItems, requests, type RequestSnapshot } from "@/modules/requests/requests.schema";
+import {
+  attachments,
+  requestCounters,
+  requestItems,
+  requestRevisions,
+  requests,
+  type RequestSnapshot,
+} from "@/modules/requests/requests.schema";
 import { formatRequestCode } from "@/modules/requests/requests.service";
 import { user } from "@/modules/users/users.schema";
 import { FUNCTIONAL_ROLES, ROLES } from "@/shared/constants/role.constant";
@@ -15,6 +23,7 @@ import { ActionError, authedProcedure, roleProcedure } from "@/shared/libs/actio
 import { db } from "@/shared/libs/db.lib";
 import { env } from "@/shared/libs/env.lib";
 import { flushMailOutbox, isMailConfigured, queueMail } from "@/shared/libs/mail.lib";
+import { logger } from "@/shared/libs/logger.lib";
 
 import { countPendingApprovals, getActorContext } from "./approvals.query";
 import { approvals } from "./approvals.schema";
@@ -121,7 +130,7 @@ async function inTransaction<T>(work: (tx: Tx, outbox: Outbox) => Promise<T>) {
     await queueNotificationMails(tx, outbox);
     return value;
   });
-  if (isMailConfigured) after(() => flushMailOutbox().catch((error) => console.error("[mail] flush thất bại", error)));
+  if (isMailConfigured) after(() => flushMailOutbox().catch((error) => logger.error("mail.flush_failed", { error })));
   return result;
 }
 
@@ -371,6 +380,36 @@ export const rejectRequest = authedProcedure
     });
   });
 
+async function saveRevision(tx: Tx, requestId: string) {
+  const [[content], items, files, [{ last }]] = await Promise.all([
+    tx
+      .select({ title: requests.title, reason: requests.reason, formData: requests.formData, totalAmount: requests.totalAmount })
+      .from(requests)
+      .where(eq(requests.id, requestId)),
+    tx
+      .select({
+        name: requestItems.name,
+        unit: requestItems.unit,
+        quantity: requestItems.quantity,
+        unitPrice: requestItems.unitPrice,
+        amount: requestItems.amount,
+      })
+      .from(requestItems)
+      .where(eq(requestItems.requestId, requestId))
+      .orderBy(asc(requestItems.sortOrder)),
+    tx
+      .select({ id: attachments.id, fileName: attachments.fileName, sizeBytes: attachments.sizeBytes })
+      .from(attachments)
+      .where(and(eq(attachments.requestId, requestId), isNull(attachments.removedAt)))
+      .orderBy(asc(attachments.uploadedAt)),
+    tx
+      .select({ last: sql<number>`coalesce(max(${requestRevisions.revision}), 0)::int` })
+      .from(requestRevisions)
+      .where(eq(requestRevisions.requestId, requestId)),
+  ]);
+  await tx.insert(requestRevisions).values({ requestId, revision: last + 1, ...content, items, attachments: files });
+}
+
 export const returnRequest = authedProcedure
   .createServerAction()
   .input(returnInput)
@@ -381,6 +420,7 @@ export const returnRequest = authedProcedure
         .update(approvals)
         .set({ result: "RETURNED", actedById: ctx.user.id, onBehalfOfId, comment: input.comment, decidedAt: new Date() })
         .where(and(eq(approvals.id, row.id), eq(approvals.result, "WAITING")));
+      await saveRevision(tx, row.requestId);
       await tx.update(requests).set({ status: "NEEDS_INFO" }).where(eq(requests.id, row.requestId));
       await notify(tx, outbox, [row.requesterId], {
         type: "REQUEST_RETURNED",
@@ -507,7 +547,10 @@ export const reassignApproval = roleProcedure(ROLES.ADMIN)
       if (input.approverId === row.requesterId) {
         throw new ActionError("UNPROCESSABLE_CONTENT", "Không thể giao cho chính người làm đơn");
       }
-      const [assignee] = await tx.select({ banned: user.banned }).from(user).where(eq(user.id, input.approverId));
+      const [assignee] = await tx
+        .select({ banned: user.banned, name: user.name })
+        .from(user)
+        .where(eq(user.id, input.approverId));
       if (!assignee || assignee.banned) {
         throw new ActionError("UNPROCESSABLE_CONTENT", "Người được chọn không tồn tại hoặc đã bị khóa");
       }
@@ -515,6 +558,16 @@ export const reassignApproval = roleProcedure(ROLES.ADMIN)
         .update(approvals)
         .set({ approverId: input.approverId, approverRole: null, reassignedById: ctx.user.id, reassignedAt: new Date() })
         .where(eq(approvals.id, row.id));
+      await recordAudit(tx, ctx.user, {
+        action: "APPROVAL_REASSIGNED",
+        targetType: "approval",
+        targetId: row.id,
+        summary: `${row.code} · ${row.stepName} → ${assignee.name}`,
+        changes: {
+          approverId: { from: row.approverId, to: input.approverId },
+          approverRole: { from: row.approverRole, to: null },
+        },
+      });
       await notify(tx, outbox, await withDelegates([input.approverId], row.requesterId), {
         type: "APPROVAL_NEEDED",
         title: `${row.code} được giao cho bạn duyệt (${row.stepName}): ${row.title}`.slice(0, 200),

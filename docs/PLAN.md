@@ -9,6 +9,8 @@ Kế hoạch chi tiết theo lộ trình ở `ARCHITECTURE.md` mục 7. Mỗi gi
 - [x] Đã bỏ zsa (viết cho zod 3, input `formData` hỏng với zod 4): server action dùng lớp bọc riêng ở `action.lib.ts` (cùng API `authedProcedure` / `roleProcedure`, trả `[data, error]`, nhận cả FormData). Không còn cần `.npmrc` `legacy-peer-deps`.
 - [x] Hướng dẫn triển khai không dùng Docker ở `docs/DEPLOY.md` (systemd, nginx, sao lưu, file mẫu trong `deploy/`).
 - [x] Toàn bộ 10 giai đoạn đã làm và kiểm thử, kết quả ở mục 4.
+- [x] Đợt hoàn thiện sau audit: kiểm quyền ở từng trang quản trị (không chỉ layout), header bảo mật, trang lỗi / 404 tiếng Việt, nhật ký quản trị (`audit_logs`), giữ bản cũ và tệp đã gửi khi bổ sung (`request_revisions`, `attachments.removed_at`), chính sách mật khẩu + khóa tạm khi đăng nhập sai + thời hạn phiên, phân trang và lọc ở server cho chờ duyệt / lịch sử / thông báo, báo cáo theo giờ Việt Nam, log JSON, triển khai theo release (`scripts/deploy.sh`).
+- [ ] Chưa làm, cần chốt phạm vi: xuất / in đơn, nhắc SLA tự động, người dùng tự sửa tên, admin tạo ủy quyền thay người khác.
 
 ### Chạy dự án
 
@@ -329,14 +331,17 @@ Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` �
 
 | File | Nội dung |
 |---|---|
-| `auth.spec.ts` | Chưa đăng nhập → sign-in kèm `callbackURL`; `callbackURL=/%09/evil` không đưa ra ngoài; `callbackURL` hợp lệ được giữ; không có SMTP thì trang quên mật khẩu hướng dẫn liên hệ admin; admin đặt mật khẩu → phiên cũ bị đăng xuất |
+| `auth.spec.ts` | Chưa đăng nhập → sign-in kèm `callbackURL`; `callbackURL=/%09/evil` không đưa ra ngoài; `callbackURL` hợp lệ được giữ; không có SMTP thì trang quên mật khẩu hướng dẫn liên hệ admin; admin đặt mật khẩu → phiên cũ bị đăng xuất; sai 5 lần → khóa tạm, admin đặt mật khẩu → mở; đổi vai trò → đăng xuất; mật khẩu yếu bị từ chối |
 | `request-flow.spec.ts` | Trên trình duyệt: lưu nháp khi dòng hạng mục trống, số lượng `2,5` × `1.500.000` = 3.750.000 khớp DB, upload PDF, gửi, 3 người duyệt qua UI. Đơn đang chờ không đổi khi admin sửa biểu mẫu / tắt hạng mục; sửa bước bị chặn |
 | `concurrency.spec.ts` | Giữ khóa dòng để tái hiện chính xác: sửa nháp / xóa nháp / xóa tệp / sửa bước duyệt trùng lúc gửi đơn đều bị chặn; duyệt và hủy cùng lúc không lỗi server. Đã thử gỡ khóa trong code thì các test tương ứng fail |
 | `reassign.spec.ts` | Khóa người giữ vai trò duy nhất → tổng quan admin báo lượt treo → giao lại qua UI → người mới nhận thông báo và duyệt được; hủy đơn báo cho người giữ vai trò và người được họ ủy quyền |
 | `mobile.spec.ts` | 8 trang workspace ở 390×844: không tràn ngang, thanh tab đáy hiển thị; "Đơn chờ tôi duyệt" hiện dạng thẻ dưới 768px |
 | `drag-drop.spec.ts` | Kéo thả bằng chuột đổi thứ tự trường biểu mẫu và bước duyệt, lưu đúng thứ tự vào DB |
 | `mail.spec.ts` | Quên mật khẩu → email thật tới SMTP sink → mở liên kết → đặt mật khẩu mới → đăng nhập được; người duyệt nhận email khi có đơn chờ; `mail:flush` gửi email tồn, SMTP lỗi thì hẹn gửi lại |
-| `return.spec.ts` | Người duyệt yêu cầu bổ sung (bắt buộc nội dung) → người làm đơn thấy thông báo, bổ sung tệp, sửa lý do, gửi lại → đơn duyệt lại từ bước đầu; hủy khi chờ bổ sung báo cho người đã yêu cầu; hủy khi đang chờ bổ sung; gửi lại hai lần bị chặn |
+| `return.spec.ts` | Người duyệt yêu cầu bổ sung (bắt buộc nội dung) → người làm đơn thấy thông báo, bổ sung tệp, sửa lý do, gửi lại → đơn duyệt lại từ bước đầu; hủy khi chờ bổ sung báo cho người đã yêu cầu; hủy khi đang chờ bổ sung; gửi lại hai lần bị chặn; tệp đã gửi chỉ gỡ mềm, bản trước xem được |
+| `authz.spec.ts` | Nhân viên mở trực tiếp hoặc phát lại request điều hướng RSC của trang quản trị không thấy dữ liệu; mọi action quản trị trả FORBIDDEN; header bảo mật; 404 tiếng Việt; tiêu đề trang |
+| `audit.spec.ts` | Tạo / sửa / xóa phòng ban ghi nhật ký kèm diff, trang nhật ký lọc được |
+| `lists.spec.ts` | Chờ duyệt lọc theo từ khóa, ủy quyền, quá hạn; lịch sử lọc theo kết quả; thông báo lọc chưa đọc; báo cáo tháng chạy được |
 | `followups.spec.ts` | Lọc và phân trang ở server theo URL; người chỉ được ủy quyền vào trang ủy quyền; người ủy quyền thấy lượt được duyệt thay trong lịch sử; nháp cũ lưu được sau khi biểu mẫu đổi; tệp giả PDF bị từ chối; lỗi rõ cho id không tồn tại, phòng ban sai, quản lý bị khóa |
 
 **Chưa kiểm:** portal admin trên điện thoại (thiết kế cho máy tính); gửi email qua dịch vụ SMTP thật và S3 thật (đã kiểm với SMTP sink và moto).
@@ -348,8 +353,8 @@ Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` �
 | Server action tự viết (`action.lib.ts`) | Lỗi không lường trước được ghi log và trả `INTERNAL_SERVER_ERROR`, không lộ chi tiết ra client; lỗi điều hướng của Next (`redirect`, `notFound`) được ném lại nguyên vẹn |
 | Server component dùng component antd | Chỉ dùng export có tên (`Button`, `Tag`); **không** dùng `X.Y` (`Layout.Content`, `Descriptions.Item`...) và không dùng icon trong server component — đặt chúng trong component `"use client"` |
 | `cacheComponents` | Không dùng `new Date()` / `Math.random()` khi render ở phần tĩnh. Layout portal đọc session bên trong `<Suspense>` và mỗi trang có `loading.tsx`, nên `next dev` không còn cảnh báo "uncached data"; trang mới cũng cần `loading.tsx` |
-| Rate limit đăng nhập của better-auth (production) | Lưu trong bảng `rate_limit` nên có hiệu lực chung khi chạy nhiều instance; script tự động cần đợi rồi thử lại. Chạy sau nhiều tầng proxy thì cấu hình `advanced.ipAddress` trong `auth.lib.ts` theo hạ tầng, nếu không mọi người dùng có thể dùng chung một hạn mức |
-| Danh sách lớn | Người dùng và đơn lọc, phân trang ở server theo `searchParams` (20 dòng/trang). Danh sách "chờ tôi duyệt" và lịch sử duyệt vẫn tải hết; cần thì phân trang tương tự |
+| Rate limit đăng nhập của better-auth (production) | Lưu trong bảng `rate_limit` nên có hiệu lực chung khi chạy nhiều instance; script tự động cần đợi rồi thử lại. Thêm giới hạn theo email + IP (`sign_in_failures`): lượt thử được đếm nguyên tử trước khi kiểm mật khẩu nên gửi song song không vượt quá 5 lượt / 15 phút; admin gỡ khóa ở danh sách người dùng. Chạy sau nhiều tầng proxy thì cấu hình `advanced.ipAddress` trong `auth.lib.ts` theo hạ tầng, nếu không mọi người dùng có thể dùng chung một hạn mức |
+| Danh sách lớn | Người dùng, đơn, chờ duyệt, lịch sử duyệt, thông báo và nhật ký quản trị đều lọc, phân trang ở server theo `searchParams` (20 dòng/trang) |
 | Lưu tệp | Mặc định ổ đĩa local (`uploads/`), không dùng được khi chạy nhiều instance; đặt `DEFEAT_S3_*` để dùng S3/R2/MinIO (`storage.lib.ts`) |
 | Email (G7) | Hàng đợi `email_outbox` ghi trong cùng transaction với thông báo; gửi sau khi phản hồi xong, lỗi thì thử lại tối đa 8 lần giãn dần; `npm run mail:flush` (systemd timer 5 phút) gửi nốt phần còn tồn |
 | Giả định G1–G9 | Vẫn cần chốt với người viết `docs.md`; schema đang theo các giả định này |

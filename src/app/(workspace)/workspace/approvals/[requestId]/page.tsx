@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { canViewRequest, getActionableApproval, getApprovalTimeline } from "@/modules/approvals/approvals.query";
@@ -7,6 +8,8 @@ import { RequestDetail } from "@/modules/requests/components/request-detail";
 import { getRequestDetail } from "@/modules/requests/requests.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { requireSession } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Duyệt đơn" };
 
 export default async function ApprovalDetailPage({ params }: PageProps<"/workspace/approvals/[requestId]">) {
   const { requestId } = await params;

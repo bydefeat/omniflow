@@ -6,6 +6,7 @@ import { useState } from "react";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { authClient } from "@/shared/libs/auth-client.lib";
 import { formatDate } from "@/shared/libs/format.lib";
+import { PASSWORD_HINT, passwordFormRule } from "@/shared/libs/password.lib";
 
 import type { UserProfile } from "../users.query";
 import { RoleTags } from "./role-tags";
@@ -33,7 +34,9 @@ export function ProfileView({ profile }: { profile: UserProfile }) {
       return message.error(
         error.code === "INVALID_PASSWORD"
           ? "Mật khẩu hiện tại không đúng"
-          : "Không đổi được mật khẩu. Vui lòng thử lại.",
+          : error.code === "WEAK_PASSWORD"
+            ? (error.message ?? PASSWORD_HINT)
+            : "Không đổi được mật khẩu. Vui lòng thử lại.",
       );
     }
     form.resetFields();
@@ -77,9 +80,10 @@ export function ProfileView({ profile }: { profile: UserProfile }) {
             <Form.Item
               name="newPassword"
               label="Mật khẩu mới"
+              extra={PASSWORD_HINT}
               rules={[
                 { required: true, message: "Vui lòng nhập mật khẩu mới" },
-                { min: 8, message: "Tối thiểu 8 ký tự" },
+                passwordFormRule,
               ]}
             >
               <Input.Password autoComplete="new-password" />
