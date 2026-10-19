@@ -22,11 +22,11 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       if (isMailConfigured) {
-        await sendMail({
+        void sendMail({
           to: user.email,
           subject: "Đặt lại mật khẩu OmniFlow",
           text: `Chào ${user.name},\n\nMở liên kết sau để đặt lại mật khẩu (hết hạn sau 1 giờ):\n${url}\n\nNếu bạn không yêu cầu, hãy bỏ qua email này.`,
-        });
+        }).catch((error) => console.error("[reset-password] gửi email thất bại", error));
       } else if (process.env.NODE_ENV !== "production") {
         console.info(`[reset-password] ${user.email}: ${url}`);
       } else {

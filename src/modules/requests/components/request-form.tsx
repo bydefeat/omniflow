@@ -77,12 +77,13 @@ export function RequestForm({ types, draft, submitAction }: Props) {
 
   async function persist(): Promise<string | null> {
     const values = form.getFieldsValue(true) as Values;
-    const items = (type?.hasLineItems ? (values.items ?? []) : []).filter((item) => !isBlankLineItem(item));
-    const problemIndex = items.findIndex((item) => lineItemProblem(item));
+    const rows = type?.hasLineItems ? (values.items ?? []) : [];
+    const problemIndex = rows.findIndex((item) => !isBlankLineItem(item) && lineItemProblem(item));
     if (problemIndex >= 0) {
-      message.error(`Hạng mục dòng ${problemIndex + 1}: ${lineItemProblem(items[problemIndex])}`);
+      message.error(`Hạng mục dòng ${problemIndex + 1}: ${lineItemProblem(rows[problemIndex])}`);
       return null;
     }
+    const items = rows.filter((item) => !isBlankLineItem(item));
     const payload = {
       title: values.title,
       reason: values.reason,

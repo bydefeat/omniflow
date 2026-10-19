@@ -40,9 +40,13 @@ function formatVnd(value: number | string | undefined, info: { userTyping: boole
   return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (decimals ? `,${decimals}` : "");
 }
 
+const VND_PATTERN = /^(\d{1,3}(\.\d{3})*|\d+)(,\d{0,2})?$/;
+
 function parseVnd(text: string | undefined) {
-  const value = Number((text ?? "").replace(/\./g, "").replace(",", "."));
-  return Number.isFinite(value) ? Math.round(value * 100) / 100 : 0;
+  const value = (text ?? "").trim();
+  if (!value) return "";
+  if (!VND_PATTERN.test(value)) return "NaN";
+  return value.replace(/\./g, "").replace(",", ".");
 }
 
 export const newLineItem = (): LineItemValue => ({
@@ -117,7 +121,7 @@ export function LineItemsTable({ value = [], onChange }: Props) {
           step={1000}
           value={row.original.unitPrice}
           formatter={formatVnd}
-          parser={parseVnd}
+          parser={parseVnd as unknown as (text: string | undefined) => number}
           onChange={(unitPrice) => update(row.original.key, { unitPrice })}
         />
       ),

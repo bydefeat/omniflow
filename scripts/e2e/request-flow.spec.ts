@@ -36,6 +36,12 @@ test("tạo đơn có hạng mục, lưu nháp, đính kèm, gửi và duyệt �
     await row.locator("input").nth(0).fill("Vé máy bay");
     await row.locator("input").nth(1).fill("Vé");
     await row.locator("input").nth(2).fill("2,5");
+    await page.getByRole("button", { name: "Lưu nháp" }).click();
+    await expect(page.getByText("Hạng mục dòng 1: thiếu đơn giá")).toBeVisible();
+
+    await row.locator("input").nth(3).fill("1500000.5");
+    await row.locator("input").nth(3).blur();
+    await expect(row.locator("input").nth(3)).not.toHaveValue("15.000.005");
     await row.locator("input").nth(3).fill("1.500.000");
     await row.locator("input").nth(3).blur();
     await expect(page.locator("tfoot").filter({ visible: true })).toContainText("3.750.000");

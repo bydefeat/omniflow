@@ -8,7 +8,7 @@ const hasAtMostTwoDecimals = (value: number) => Math.abs(value * 100 - Math.roun
 export const toCents = (value: number) => Math.round(value * 100);
 
 export const lineAmountCents = (quantity: number, unitPrice: number) =>
-  Math.round((toCents(quantity) * toCents(unitPrice)) / 100);
+  Number((BigInt(toCents(quantity)) * BigInt(toCents(unitPrice)) + BigInt(50)) / BigInt(100));
 
 export const lineItemInput = z
   .object({
@@ -17,12 +17,12 @@ export const lineItemInput = z
     quantity: z
       .number("Nhập số lượng")
       .positive("Số lượng phải lớn hơn 0")
-      .max(MAX_QUANTITY)
+      .max(MAX_QUANTITY, "Số lượng quá lớn")
       .refine(hasAtMostTwoDecimals, "Số lượng có tối đa 2 chữ số thập phân"),
     unitPrice: z
       .number("Nhập đơn giá")
       .min(0, "Đơn giá không âm")
-      .max(MAX_AMOUNT)
+      .max(MAX_AMOUNT, "Đơn giá quá lớn")
       .refine(hasAtMostTwoDecimals, "Đơn giá có tối đa 2 chữ số thập phân"),
   })
   .refine((item) => lineAmountCents(item.quantity, item.unitPrice) <= MAX_AMOUNT * 100, {

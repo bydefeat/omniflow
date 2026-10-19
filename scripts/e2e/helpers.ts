@@ -54,8 +54,10 @@ export async function signInWithForm(page: Page, email: string, password: string
     await page.getByRole("button", { name: "Đăng nhập" }).click();
     const failed = page.getByText("Không thể đăng nhập");
     const outcome = await Promise.race([
-      page.waitForURL((url) => !url.pathname.startsWith("/authentication"), { timeout: 15_000 }).then(() => "ok"),
-      failed.waitFor({ timeout: 15_000 }).then(() => "limited"),
+      page
+        .waitForURL((url) => !url.pathname.startsWith("/authentication"), { timeout: 15_000 })
+        .then(() => "ok", () => "timeout"),
+      failed.waitFor({ timeout: 15_000 }).then(() => "limited", () => "timeout"),
     ]);
     if (outcome === "ok") return;
     await page.waitForTimeout(11_000);
@@ -106,16 +108,23 @@ export async function callAction<T = unknown>(context: APIRequestContext, name: 
   });
   const body = await response.text();
   const line = body.split("\n").find((l) => l.startsWith("1:"));
-  if (!line) throw new Error(`Action ${name} returned ${response.status()}: ${body.slice(0, 300)}`);
+  if (!line || line.startsWith("1:E")) {
+    throw new Error(`Action ${name} failed with ${response.status()}: ${body.slice(0, 300)}`);
+  }
   return JSON.parse(line.slice(2)) as [T, null] | [null, ActionError];
 }
 
-export async function waitForBlockedQuery() {
+export async function waitForBlockedQuery(blockerPid: number, table: string) {
   await expect
     .poll(
       async () =>
         (
-          await sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`
+          await sql`
+            select count(*)::int as n from pg_stat_activity
+            where datname = current_database()
+              and wait_event_type = 'Lock'
+              and ${blockerPid} = any(pg_blocking_pids(pid))
+              and query ilike ${`%"${table}"%`}`
         )[0].n,
       { timeout: 10_000 },
     )

@@ -41,16 +41,20 @@ test("admin đặt mật khẩu mới thì các phiên cũ của người dùng 
   });
   expect(createError).toBeNull();
   const [created] = await sql`select id from "user" where email = ${email}`;
+  try {
 
-  const victim = await request.newContext({ baseURL: BASE_URL });
-  expect((await signIn(victim, email, "Matkhau@123")).ok()).toBeTruthy();
-  expect((await callAction(victim, "getMyPendingApprovalCount"))[1]).toBeNull();
+    const victim = await request.newContext({ baseURL: BASE_URL });
+    expect((await signIn(victim, email, "Matkhau@123")).ok()).toBeTruthy();
+    expect((await callAction(victim, "getMyPendingApprovalCount"))[1]).toBeNull();
 
-  const [, resetError] = await callAction(admin, "setUserPassword", { userId: created.id, newPassword: "Matkhau@456" });
-  expect(resetError).toBeNull();
+    const [, resetError] = await callAction(admin, "setUserPassword", { userId: created.id, newPassword: "Matkhau@456" });
+    expect(resetError).toBeNull();
 
-  const [, afterError] = await callAction(victim, "getMyPendingApprovalCount");
-  expect(afterError?.code).toBe("NOT_AUTHORIZED");
-  await victim.dispose();
-  await admin.dispose();
+    const [, afterError] = await callAction(victim, "getMyPendingApprovalCount");
+    expect(afterError?.code).toBe("NOT_AUTHORIZED");
+    await victim.dispose();
+  } finally {
+    await sql`delete from "user" where id = ${created.id}`;
+    await admin.dispose();
+  }
 });
