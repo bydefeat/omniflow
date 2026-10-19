@@ -17,7 +17,7 @@ export const createDelegation = authedProcedure
   .input(delegationInput)
   .handler(async ({ input: rawInput, ctx }) => {
     const input = rawInput as DelegationInput;
-    if (!(await canDelegate(ctx.user.id, ctx.user.role))) {
+    if (!(await canDelegate(ctx.user.id))) {
       throw new ZSAError("FORBIDDEN", "Bạn không có quyền phê duyệt nên không thể ủy quyền");
     }
     if (new Date(input.endsAt) <= new Date()) {

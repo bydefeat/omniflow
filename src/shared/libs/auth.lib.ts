@@ -15,6 +15,7 @@ export const auth = betterAuth({
   baseURL: env.DEFEAT_BETTER_AUTH_PUBLIC_APPLICATION_BASE_URL,
   database: drizzleAdapter(db, { provider: "pg", schema }),
   advanced: { database: { generateId: () => uuidv7() } },
+  rateLimit: { storage: "database" },
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,

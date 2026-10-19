@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, inArray, isNotNull, ne, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
-import { getActiveDelegators } from "@/modules/delegations/delegations.query";
+import { getActiveDelegators, hasReceivedDelegations } from "@/modules/delegations/delegations.query";
 import { departments } from "@/modules/departments/departments.schema";
 import { getApprovalSteps } from "@/modules/request-types/request-types.query";
 import { requestTypes } from "@/modules/request-types/request-types.schema";
@@ -37,12 +37,15 @@ function pendingFor(actor: ActorContext) {
 export async function canAccessApprovals(userId: string) {
   const actor = await getActorContext(userId);
   if (hasApproverRole(actor.roles) || actor.delegators.length > 0) return true;
+  if (await hasReceivedDelegations(userId)) return true;
   const [subordinate] = await db.select({ id: user.id }).from(user).where(eq(user.managerId, userId)).limit(1);
   if (subordinate) return true;
   const [involved] = await db
     .select({ id: approvals.id })
     .from(approvals)
-    .where(or(eq(approvals.approverId, userId), eq(approvals.actedById, userId)))
+    .where(
+      or(eq(approvals.approverId, userId), eq(approvals.actedById, userId), eq(approvals.onBehalfOfId, userId)),
+    )
     .limit(1);
   return Boolean(involved);
 }
@@ -94,6 +97,7 @@ export async function countPendingApprovals(userId: string) {
 }
 
 const onBehalfOf = alias(user, "on_behalf_of");
+const actedBy = alias(user, "acted_by");
 
 export async function getApprovalHistory(userId: string) {
   return db
@@ -109,20 +113,22 @@ export async function getApprovalHistory(userId: string) {
       comment: approvals.comment,
       decidedAt: approvals.decidedAt,
       onBehalfOfName: onBehalfOf.name,
+      actedByName: actedBy.name,
+      actedByDelegate: sql<boolean>`${approvals.actedById} <> ${userId}`,
     })
     .from(approvals)
     .innerJoin(requests, eq(requests.id, approvals.requestId))
     .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
     .innerJoin(requester, eq(requester.id, requests.requesterId))
     .leftJoin(onBehalfOf, eq(onBehalfOf.id, approvals.onBehalfOfId))
-    .where(eq(approvals.actedById, userId))
+    .leftJoin(actedBy, eq(actedBy.id, approvals.actedById))
+    .where(or(eq(approvals.actedById, userId), eq(approvals.onBehalfOfId, userId)))
     .orderBy(desc(approvals.decidedAt));
 }
 
 export type ApprovalHistoryRow = Awaited<ReturnType<typeof getApprovalHistory>>[number];
 
 const approver = alias(user, "approver");
-const actedBy = alias(user, "acted_by");
 const reassignedBy = alias(user, "reassigned_by");
 
 const hasNoActiveAssignee = sql<boolean>`(
@@ -268,11 +274,11 @@ export async function getAdminOverview() {
       .from(approvals)
       .where(and(eq(approvals.result, "WAITING"), sql`${approvals.dueAt} < now()`)),
     db
-      .select({ name: approver.name, total: count() })
+      .select({ id: approver.id, name: approver.name, code: approver.employeeCode, total: count() })
       .from(approvals)
       .innerJoin(approver, eq(approver.id, approvals.approverId))
       .where(eq(approvals.result, "WAITING"))
-      .groupBy(approver.name)
+      .groupBy(approver.id, approver.name, approver.employeeCode)
       .orderBy(desc(count()))
       .limit(5),
     db
@@ -308,6 +314,9 @@ export async function getReportData() {
       .orderBy(sql`date_trunc('month', ${requests.submittedAt})`),
     db
       .select({
+        key: sql<string>`${requestTypes.id} || ':' || ${approvals.stepOrder}`,
+        typeName: requestTypes.name,
+        stepOrder: approvals.stepOrder,
         stepName: approvals.stepName,
         decided: count(),
         avgHours: sql<number>`round(avg(extract(epoch from ${approvals.decidedAt} - ${approvals.createdAt}) / 3600)::numeric, 1)`.mapWith(
@@ -316,9 +325,11 @@ export async function getReportData() {
         onTime: sql<number>`count(*) filter (where ${approvals.decidedAt} <= ${approvals.dueAt})`.mapWith(Number),
       })
       .from(approvals)
+      .innerJoin(requests, eq(requests.id, approvals.requestId))
+      .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
       .where(inArray(approvals.result, ["APPROVED", "REJECTED"]))
-      .groupBy(approvals.stepName)
-      .orderBy(asc(approvals.stepName)),
+      .groupBy(requestTypes.id, requestTypes.name, approvals.stepOrder, approvals.stepName)
+      .orderBy(asc(requestTypes.name), asc(approvals.stepOrder)),
     db
       .select({
         decided: count(),

@@ -1,7 +1,9 @@
 import {
   type AnyPgColumn,
+  bigint,
   boolean,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -97,3 +99,10 @@ export const verification = pgTable(
   },
   (t) => [index().on(t.identifier)],
 );
+
+export const rateLimit = pgTable("rate_limit", {
+  id: text().primaryKey(),
+  key: text().notNull().unique(),
+  count: integer().notNull(),
+  lastRequest: bigint({ mode: "number" }).notNull(),
+});

@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 import { ZSAError } from "zsa";
 
@@ -10,6 +10,8 @@ import { auth } from "@/shared/libs/auth.lib";
 import { db } from "@/shared/libs/db.lib";
 import { PG_ERRORS, pgErrorCode } from "@/shared/libs/db-error.lib";
 import { serializeRoles } from "@/shared/libs/role.lib";
+
+import { departments } from "@/modules/departments/departments.schema";
 
 import { user } from "./users.schema";
 import {
@@ -21,12 +23,34 @@ import {
 
 const adminProcedure = roleProcedure(ROLES.ADMIN);
 
-async function assertNoManagerCycle(userId: string, managerId: string | null) {
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function assertAssignable(
+  executor: Tx | typeof db,
+  input: { departmentId: string; managerId: string | null },
+  currentManagerId?: string | null,
+) {
+  const [department] = await executor
+    .select({ id: departments.id })
+    .from(departments)
+    .where(eq(departments.id, input.departmentId));
+  if (!department) throw new ZSAError("UNPROCESSABLE_CONTENT", "Phòng ban được chọn không tồn tại");
+  if (!input.managerId || input.managerId === currentManagerId) return;
+  const [manager] = await executor
+    .select({ banned: user.banned })
+    .from(user)
+    .where(eq(user.id, input.managerId));
+  if (!manager) throw new ZSAError("UNPROCESSABLE_CONTENT", "Quản lý được chọn không tồn tại");
+  if (manager.banned) throw new ZSAError("UNPROCESSABLE_CONTENT", "Quản lý được chọn đang bị khóa tài khoản");
+}
+
+async function assertNoManagerCycle(tx: Tx, userId: string, managerId: string | null) {
   if (!managerId) return;
   if (managerId === userId) {
     throw new ZSAError("UNPROCESSABLE_CONTENT", "Người dùng không thể tự quản lý chính mình");
   }
-  const rows = await db.select({ id: user.id, managerId: user.managerId }).from(user);
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('omniflow:user-manager'))`);
+  const rows = await tx.select({ id: user.id, managerId: user.managerId }).from(user);
   const managerOf = new Map(rows.map((r) => [r.id, r.managerId]));
   const seen = new Set<string>();
   let current: string | null | undefined = managerId;
@@ -56,6 +80,7 @@ export const createUser = adminProcedure
         taken.email === input.email ? "Email đã được sử dụng" : "Mã nhân viên đã tồn tại",
       );
     }
+    await assertAssignable(db, input);
 
     await auth.api.createUser({
       headers: await headers(),
@@ -80,28 +105,27 @@ export const updateUser = adminProcedure
     if (input.id === ctx.user.id && !input.roles.includes(ROLES.ADMIN)) {
       throw new ZSAError("UNPROCESSABLE_CONTENT", "Không thể tự gỡ vai trò quản trị của chính mình");
     }
-    await assertNoManagerCycle(input.id, input.managerId);
+    await db.transaction(async (tx) => {
+      const [current] = await tx.select({ managerId: user.managerId }).from(user).where(eq(user.id, input.id));
+      if (!current) throw new ZSAError("NOT_FOUND", "Không tìm thấy người dùng");
+      await assertAssignable(tx, input, current.managerId);
+      await assertNoManagerCycle(tx, input.id, input.managerId);
 
-    const updated = await db
-      .update(user)
-      .set({
-        name: input.name,
-        employeeCode: input.employeeCode,
-        departmentId: input.departmentId,
-        managerId: input.managerId,
-        role: serializeRoles(input.roles).join(","),
-      })
-      .where(eq(user.id, input.id))
-      .returning({ id: user.id })
-      .catch((error) => {
-        const code = pgErrorCode(error);
-        if (code === PG_ERRORS.UNIQUE) throw new ZSAError("CONFLICT", "Mã nhân viên đã tồn tại");
-        if (code === PG_ERRORS.FOREIGN_KEY) {
-          throw new ZSAError("UNPROCESSABLE_CONTENT", "Phòng ban hoặc quản lý được chọn không tồn tại");
-        }
-        throw error;
-      });
-    if (updated.length === 0) throw new ZSAError("NOT_FOUND", "Không tìm thấy người dùng");
+      await tx
+        .update(user)
+        .set({
+          name: input.name,
+          employeeCode: input.employeeCode,
+          departmentId: input.departmentId,
+          managerId: input.managerId,
+          role: serializeRoles(input.roles).join(","),
+        })
+        .where(eq(user.id, input.id))
+        .catch((error) => {
+          if (pgErrorCode(error) === PG_ERRORS.UNIQUE) throw new ZSAError("CONFLICT", "Mã nhân viên đã tồn tại");
+          throw error;
+        });
+    });
   });
 
 export const setUserBanned = adminProcedure

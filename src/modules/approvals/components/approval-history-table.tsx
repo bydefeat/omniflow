@@ -45,7 +45,11 @@ export function ApprovalHistoryTable({ rows }: { rows: ApprovalHistoryRow[] }) {
           render: (result: keyof typeof APPROVAL_RESULT_META, row) => (
             <div>
               <Tag color={APPROVAL_RESULT_META[result].color}>{APPROVAL_RESULT_META[result].label}</Tag>
-              {row.onBehalfOfName && <div className="text-xs text-black/45">Thay {row.onBehalfOfName}</div>}
+              {row.actedByDelegate ? (
+                <div className="text-xs text-black/45">{row.actedByName} duyệt thay bạn</div>
+              ) : (
+                row.onBehalfOfName && <div className="text-xs text-black/45">Thay {row.onBehalfOfName}</div>
+              )}
             </div>
           ),
         },

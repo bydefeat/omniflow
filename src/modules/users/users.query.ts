@@ -1,4 +1,4 @@
-import { and, asc, eq, not, sql } from "drizzle-orm";
+import { and, asc, count, eq, not, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { departments } from "@/modules/departments/departments.schema";
@@ -47,6 +47,11 @@ export async function listUserOptions(options: { excludeId?: string } = {}) {
       ),
     )
     .orderBy(asc(user.name));
+}
+
+export async function countUsers() {
+  const [row] = await db.select({ total: count() }).from(user);
+  return row.total;
 }
 
 export type UserOption = Awaited<ReturnType<typeof listUserOptions>>[number];

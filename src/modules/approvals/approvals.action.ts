@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, count, eq, ne, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, ne, sql } from "drizzle-orm";
 import { ZSAError } from "zsa";
 
 import { getActiveDelegates } from "@/modules/delegations/delegations.query";
@@ -13,6 +13,8 @@ import { user } from "@/modules/users/users.schema";
 import { FUNCTIONAL_ROLES, ROLES } from "@/shared/constants/role.constant";
 import { authedProcedure, roleProcedure } from "@/shared/libs/action.lib";
 import { db } from "@/shared/libs/db.lib";
+import { env } from "@/shared/libs/env.lib";
+import { isMailConfigured, sendMail } from "@/shared/libs/mail.lib";
 
 import { countPendingApprovals, getActorContext } from "./approvals.query";
 import { approvals } from "./approvals.schema";
@@ -71,14 +73,42 @@ async function assign(tx: Tx, step: StepConfig, requester: { id: string; manager
   return { assignee, recipients };
 }
 
+type Outbox = { userIds: string[]; title: string; href: string }[];
+
 async function notify(
   tx: Tx,
+  outbox: Outbox,
   userIds: string[],
   payload: { type: NotificationType; title: string; href: string },
 ) {
   const unique = [...new Set(userIds)];
   if (unique.length === 0) return;
   await tx.insert(notifications).values(unique.map((userId) => ({ userId, ...payload })));
+  outbox.push({ userIds: unique, title: payload.title, href: payload.href });
+}
+
+async function deliver(outbox: Outbox) {
+  if (!isMailConfigured || outbox.length === 0) return;
+  const recipients = await db
+    .select({ id: user.id, email: user.email, name: user.name })
+    .from(user)
+    .where(inArray(user.id, [...new Set(outbox.flatMap((m) => m.userIds))]));
+  for (const message of outbox) {
+    for (const recipient of recipients.filter((r) => message.userIds.includes(r.id))) {
+      void sendMail({
+        to: recipient.email,
+        subject: message.title,
+        text: `Chào ${recipient.name},\n\n${message.title}\n\nXem chi tiết: ${new URL(message.href, env.DEFEAT_BETTER_AUTH_PUBLIC_APPLICATION_BASE_URL)}`,
+      }).catch((error) => console.error("[notify] gửi email thất bại", error));
+    }
+  }
+}
+
+async function inTransaction<T>(work: (tx: Tx, outbox: Outbox) => Promise<T>) {
+  const outbox: Outbox = [];
+  const result = await db.transaction((tx) => work(tx, outbox));
+  void deliver(outbox).catch((error) => console.error("[notify] không gửi được email", error));
+  return result;
 }
 
 async function withDelegates(userIds: string[], requesterId: string) {
@@ -88,6 +118,7 @@ async function withDelegates(userIds: string[], requesterId: string) {
 
 async function openRound(
   tx: Tx,
+  outbox: Outbox,
   args: {
     request: { id: string; code: string; title: string; requesterId: string };
     step: StepConfig;
@@ -105,7 +136,7 @@ async function openRound(
     approverRole: args.assignee.approverRole,
     dueAt: computeDueAt(now, args.slaHours),
   });
-  await notify(tx, await withDelegates(args.recipients, args.request.requesterId), {
+  await notify(tx, outbox, await withDelegates(args.recipients, args.request.requesterId), {
     type: "APPROVAL_NEEDED",
     title: `${args.request.code} chờ bạn duyệt (${args.step.name}): ${args.request.title}`.slice(0, 200),
     href: `/workspace/approvals/${args.request.id}`,
@@ -155,7 +186,7 @@ export const submitRequest = authedProcedure
   .createServerAction()
   .input(submitInput)
   .handler(async ({ input, ctx }) => {
-    return db.transaction(async (tx) => {
+    return inTransaction(async (tx, outbox) => {
       const [request] = await tx
         .select({
           id: requests.id,
@@ -178,8 +209,13 @@ export const submitRequest = authedProcedure
       if (steps.length === 0) {
         throw new ZSAError("PRECONDITION_FAILED", "Loại đơn chưa được cấu hình bước duyệt");
       }
-      if (!buildFormValidator(flow.formSchema).safeParse(request.formData).success) {
-        throw new ZSAError("UNPROCESSABLE_CONTENT", "Biểu mẫu còn thiếu thông tin bắt buộc");
+      const form = buildFormValidator(flow.formSchema).safeParse(request.formData);
+      if (!form.success) {
+        const field = flow.formSchema.find((f) => f.key === form.error.issues[0]?.path[0]);
+        throw new ZSAError(
+          "UNPROCESSABLE_CONTENT",
+          field ? `Biểu mẫu chưa hợp lệ ở trường "${field.label}"` : "Biểu mẫu còn thiếu thông tin bắt buộc",
+        );
       }
       if (flow.hasLineItems) {
         const [{ total }] = await tx
@@ -208,7 +244,7 @@ export const submitRequest = authedProcedure
         .update(requests)
         .set({ status: "PENDING", code, submittedAt: new Date(), departmentId: requester.departmentId, snapshot: flow })
         .where(eq(requests.id, request.id));
-      await openRound(tx, {
+      await openRound(tx, outbox, {
         request: { id: request.id, code, title: request.title, requesterId: request.requesterId },
         step: first,
         assignee,
@@ -272,7 +308,7 @@ export const approveRequest = authedProcedure
   .createServerAction()
   .input(approveInput)
   .handler(async ({ input, ctx }) => {
-    return db.transaction(async (tx) => {
+    return inTransaction(async (tx, outbox) => {
       const { row, onBehalfOfId } = await lockRound(tx, input.approvalId, ctx.user.id);
       const now = new Date();
       await tx
@@ -287,12 +323,12 @@ export const approveRequest = authedProcedure
       if (next) {
         const requester = await loadRequester(tx, row.requesterId);
         const { assignee, recipients } = await assign(tx, next, requester);
-        await openRound(tx, { request, step: next, assignee, recipients, slaHours: flow.slaHours });
+        await openRound(tx, outbox, { request, step: next, assignee, recipients, slaHours: flow.slaHours });
         return { completed: false };
       }
 
       await tx.update(requests).set({ status: "APPROVED", completedAt: now }).where(eq(requests.id, row.requestId));
-      await notify(tx, [row.requesterId], {
+      await notify(tx, outbox, [row.requesterId], {
         type: "REQUEST_APPROVED",
         title: `${request.code} đã được duyệt: ${request.title}`.slice(0, 200),
         href: `/workspace/requests/${row.requestId}`,
@@ -305,7 +341,7 @@ export const rejectRequest = authedProcedure
   .createServerAction()
   .input(rejectInput)
   .handler(async ({ input, ctx }) => {
-    await db.transaction(async (tx) => {
+    await inTransaction(async (tx, outbox) => {
       const { row, onBehalfOfId } = await lockRound(tx, input.approvalId, ctx.user.id);
       const now = new Date();
       await tx
@@ -313,7 +349,7 @@ export const rejectRequest = authedProcedure
         .set({ result: "REJECTED", actedById: ctx.user.id, onBehalfOfId, comment: input.comment, decidedAt: now })
         .where(and(eq(approvals.id, row.id), eq(approvals.result, "WAITING")));
       await tx.update(requests).set({ status: "REJECTED", completedAt: now }).where(eq(requests.id, row.requestId));
-      await notify(tx, [row.requesterId], {
+      await notify(tx, outbox, [row.requesterId], {
         type: "REQUEST_REJECTED",
         title: `${row.code} bị từ chối ở bước ${row.stepName}: ${input.comment}`.slice(0, 200),
         href: `/workspace/requests/${row.requestId}`,
@@ -325,7 +361,7 @@ export const cancelRequest = authedProcedure
   .createServerAction()
   .input(cancelInput)
   .handler(async ({ input, ctx }) => {
-    await db.transaction(async (tx) => {
+    await inTransaction(async (tx, outbox) => {
       const [request] = await tx
         .select({ id: requests.id, requesterId: requests.requesterId, status: requests.status, code: requests.code, title: requests.title })
         .from(requests)
@@ -351,6 +387,7 @@ export const cancelRequest = authedProcedure
       ).flat();
       await notify(
         tx,
+        outbox,
         await withDelegates(assignees, request.requesterId),
         {
           type: "REQUEST_CANCELLED",
@@ -365,7 +402,7 @@ export const reassignApproval = roleProcedure(ROLES.ADMIN)
   .createServerAction()
   .input(reassignInput)
   .handler(async ({ input, ctx }) => {
-    await db.transaction(async (tx) => {
+    await inTransaction(async (tx, outbox) => {
       const row = await lockRequestAndRound(tx, input.approvalId);
       if (row.requestStatus !== "PENDING" || row.result !== "WAITING") {
         throw new ZSAError("CONFLICT", "Lượt duyệt này đã được xử lý");
@@ -381,7 +418,7 @@ export const reassignApproval = roleProcedure(ROLES.ADMIN)
         .update(approvals)
         .set({ approverId: input.approverId, approverRole: null, reassignedById: ctx.user.id, reassignedAt: new Date() })
         .where(eq(approvals.id, row.id));
-      await notify(tx, await withDelegates([input.approverId], row.requesterId), {
+      await notify(tx, outbox, await withDelegates([input.approverId], row.requesterId), {
         type: "APPROVAL_NEEDED",
         title: `${row.code} được giao cho bạn duyệt (${row.stepName}): ${row.title}`.slice(0, 200),
         href: `/workspace/approvals/${row.requestId}`,

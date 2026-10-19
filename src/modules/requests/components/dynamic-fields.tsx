@@ -3,7 +3,7 @@
 import { DatePicker, Form, Input, InputNumber, Select } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 
-import type { FormField } from "@/modules/request-types/request-types.validation";
+import { buildFormValidator, type FormField } from "@/modules/request-types/request-types.validation";
 
 const DATE_FORMAT = "YYYY-MM-DD";
 
@@ -18,7 +18,17 @@ export function DynamicFields({ fields }: { fields: FormField[] }) {
           name={["formData", field.key]}
           label={field.label}
           className={field.type === "textarea" ? "md:col-span-2" : undefined}
-          rules={field.required ? [{ required: true, message: `Vui lòng nhập ${field.label.toLowerCase()}` }] : []}
+          rules={
+            field.required
+              ? [
+                  {
+                    required: true,
+                    ...(field.type === "text" || field.type === "textarea" ? { whitespace: true } : {}),
+                    message: `Vui lòng nhập ${field.label.toLowerCase()}`,
+                  },
+                ]
+              : []
+          }
         >
           {renderControl(field)}
         </Form.Item>
@@ -63,6 +73,7 @@ export function fromFormDataPayload(fields: FormField[], data: Record<string, un
   for (const field of fields) {
     const value = data[field.key];
     if (value == null) continue;
+    if (!buildFormValidator([field], { partial: true }).safeParse({ [field.key]: value }).success) continue;
     if (field.type === "date") values[field.key] = dayjs(value as string);
     else if (field.type === "dateRange") values[field.key] = (value as string[]).map((v) => dayjs(v));
     else values[field.key] = value;

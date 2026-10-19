@@ -275,10 +275,10 @@ Mỗi folder chỉ export `index.tsx`. Menu lấy từ `shared/constants/navigat
 | Kéo thả | dnd-kit cho sắp xếp bước duyệt (UC-10) và trường form (UC-09) | |
 | Animation | Motion cho chuyển trạng thái nhỏ (dòng thời gian duyệt, toast); không animate bảng dữ liệu | |
 | Form động (UC-09) | `requestTypes.formSchema` (jsonb) mô tả các trường; `requests.formData` (jsonb) lưu giá trị. Server dựng zod schema từ `formSchema` để validate | Thêm loại đơn không cần migration |
-| Tệp đính kèm | Lưu qua `storage.lib.ts` (ổ đĩa local khi dev), chỉ tải được qua `api/files/[fileId]` có kiểm quyền | Hóa đơn, báo giá là dữ liệu nhạy cảm, không để URL công khai |
+| Tệp đính kèm | Lưu qua `storage.lib.ts` (ổ đĩa local, hoặc S3 khi cấu hình `DEFEAT_S3_*`), kiểm tra đuôi và chữ ký nội dung tệp, chỉ tải được qua `api/files/[fileId]` có kiểm quyền | Hóa đơn, báo giá là dữ liệu nhạy cảm, không để URL công khai |
 | Audit trail | Bảng `approvals` là vết kiểm toán: ai, lúc nào, kết quả, ý kiến, duyệt thay ai. Không xóa, không sửa lượt đã xử lý | Yêu cầu chống gian lận ở docs.md chương 1 |
 | Bản chụp quy trình | Lúc gửi, `requests.snapshot` giữ biểu mẫu, cờ hạng mục, SLA và các bước; chi tiết đơn, dòng thời gian và bước kế tiếp đều đọc từ đây | Admin sửa loại đơn sau đó không làm đổi đơn đang chạy hay đã xong |
-| Biến môi trường | Tiền tố `DEFEAT_*`, xem `.env.example`, parse ở `env.lib.ts`. SMTP (`DEFEAT_SMTP_CONNECTION_URL`) tùy chọn | Giống hcmue-portal. better-auth phải truyền `secret`, `baseURL` khi khởi tạo |
+| Biến môi trường | Tiền tố `DEFEAT_*`, xem `.env.example`, parse ở `env.lib.ts`. SMTP (`DEFEAT_SMTP_CONNECTION_URL`) và S3 (`DEFEAT_S3_*`) tùy chọn | Giống hcmue-portal. better-auth phải truyền `secret`, `baseURL` khi khởi tạo |
 | `cacheComponents` | Đang bật: code đọc `cookies()`/`headers()` phải nằm trong `<Suspense>` | Nếu không, build sẽ lỗi |
 
 ## 6. Điểm cần chốt lại trong docs.md

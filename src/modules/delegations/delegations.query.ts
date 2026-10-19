@@ -40,12 +40,22 @@ export async function getActiveDelegates(delegatorIds: string[]) {
     );
 }
 
-export async function canDelegate(userId: string, role: string | null | undefined) {
-  if (parseRoles(role).some((r) => APPROVER_ROLES.includes(r))) return true;
+export async function canDelegate(userId: string) {
+  const [me] = await db.select({ role: user.role }).from(user).where(eq(user.id, userId));
+  if (parseRoles(me?.role).some((r) => APPROVER_ROLES.includes(r))) return true;
   const [row] = await db
     .select({ id: user.id })
     .from(user)
     .where(eq(user.managerId, userId))
+    .limit(1);
+  return Boolean(row);
+}
+
+export async function hasReceivedDelegations(userId: string) {
+  const [row] = await db
+    .select({ id: delegations.id })
+    .from(delegations)
+    .where(eq(delegations.delegateId, userId))
     .limit(1);
   return Boolean(row);
 }

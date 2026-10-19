@@ -91,12 +91,13 @@ export function ReportView({ data }: { data: ReportData }) {
               <Empty />
             ) : (
               <Table
-                rowKey="stepName"
+                rowKey="key"
                 size="small"
                 pagination={false}
                 dataSource={data.stepDurations}
                 columns={[
-                  { title: "Bước", dataIndex: "stepName" },
+                  { title: "Loại đơn", dataIndex: "typeName" },
+                  { title: "Bước", dataIndex: "stepName", render: (name, row) => `${row.stepOrder}. ${name}` },
                   { title: "Đã xử lý", dataIndex: "decided", align: "right" },
                   { title: "TB (giờ)", dataIndex: "avgHours", align: "right" },
                   {
