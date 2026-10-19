@@ -234,103 +234,86 @@ Index: (`userId`, `readAt`).
 - Kiểu `role` của better-auth chỉ nhận `user`/`admin`, nên khi tạo người dùng truyền role qua `data.role` (xem `seed.ts`).
 - Lỗi build hay gặp: icon `@ant-design/icons` chỉ dùng được trong component có `"use client"`; không dùng `new Date()`/`Math.random()` lúc render ở server component.
 
-### Giai đoạn 3 — Layouts
+### Giai đoạn 3 — Layouts ✅
 
-- [ ] `src/shared/constants/navigation.constant.ts`: menu workspace và administrator (label, href, icon, role cần có)
-- [ ] `src/shared/stores/sidebar.store.ts`, `src/shared/hooks/media-query.hook.ts`
-- [ ] `src/shared/components/ui/`: `logo.tsx`, `page-header.tsx`, `empty-state.tsx`, `user-avatar-menu.tsx` (đăng xuất)
-- [ ] `src/shared/components/layouts/workspace/`: `index.tsx`, `sidebar.tsx`, `topbar.tsx`, `bottom-tabs.tsx`
-- [ ] `src/shared/components/layouts/administrator/`: `index.tsx`, `sidebar.tsx` (menu chia nhóm, `ConfigProvider` con cho nền đậm), `header.tsx` (breadcrumb)
-- [ ] `layout.tsx` + một `page.tsx` trống cho mỗi mục menu
+- [x] `navigation.constant.ts` (menu workspace có cờ `access`: `approvals` / `delegations`; menu admin chia nhóm), `navigation.lib.ts` (`findActiveItem`: khớp đường dẫn dài nhất)
+- [x] `sidebar.store.ts` (zustand `persist`, `skipHydration` + `rehydrate()` trong `useEffect` để không lệch hydration)
+- [x] `ui/`: `logo.tsx`, `page-header.tsx`, `user-avatar-menu.tsx` (hồ sơ, chuyển portal, đăng xuất), `page-skeleton.tsx`, `sortable-list.tsx` (dnd-kit)
+- [x] `layouts/workspace/`: sidebar thu gọn được, topbar (nút "Tạo đề xuất", chuông thông báo, avatar), tab đáy + drawer "Thêm" dưới 768px; ẩn/hiện bằng Tailwind (`hidden md:block`) nên không cần hook `useMediaQuery`
+- [x] `layouts/administrator/`: sidebar tối chia nhóm (thu về 0 dưới `lg`), header có breadcrumb
+- [x] Layout nhận phần của module qua prop (`headerExtra` = chuông thông báo, `badges` = số lượt chờ duyệt) nên `shared` không import `modules`
+- [x] `loading.tsx` cho 2 portal
 
-**Xong khi:** đi hết menu cả hai portal không lỗi 404; thu gọn sidebar giữ trạng thái khi chuyển trang; dưới 768px workspace hiện thanh tab đáy; menu ẩn theo role.
+### Giai đoạn 4 — Danh mục tổ chức ✅
 
-### Giai đoạn 4 — Danh mục tổ chức (admin)
+- [x] `departments`: validation, query (kèm số người), action thêm/sửa/xóa (trùng mã → `CONFLICT`, còn người → `PRECONDITION_FAILED`), trang quản lý
+- [x] `users`: tạo tài khoản qua `auth.api.createUser`, sửa thông tin/vai trò/quản lý (chặn vòng quản lý, chặn admin tự gỡ quyền admin, id không tồn tại → `NOT_FOUND`), khóa/mở khóa (chặn tự khóa), đặt mật khẩu mới; bảng lọc theo tên/phòng ban/vai trò
+- [x] Sửa người dùng bằng modal ngay trên danh sách, không làm trang `/administrator/users/[userId]` riêng
+- [x] `/workspace/profile`: xem thông tin, đổi mật khẩu (đăng xuất các phiên khác)
 
-- [ ] Module `departments`: schema, validation, query (`listDepartments`), action (tạo / sửa / xóa; chặn xóa khi còn người dùng — FK đã chặn, chỉ cần dịch lỗi cho dễ hiểu), components (bảng, form trong `Modal`)
-- [ ] Trang `/administrator/departments`
-- [ ] Module `users`: query (`listUsers` có lọc phòng ban / vai trò / trạng thái, phân trang phía server), action (tạo tài khoản kèm mật khẩu tạm qua `auth.api.createUser`, sửa thông tin, gán vai trò, đổi quản lý, khóa / mở khóa). Chặn chọn quản lý tạo vòng (A quản lý B, B quản lý A)
-- [ ] Trang `/administrator/users`, `/administrator/users/[userId]`
-- [ ] `/workspace/profile`: xem thông tin, đổi mật khẩu
+### Giai đoạn 5 — Cấu hình quy trình (UC-09, UC-10) ✅
 
-**Xong khi:** admin tạo được phòng ban, tạo nhân viên có quản lý, nhân viên đó đăng nhập được và đổi được mật khẩu; khóa tài khoản thì phiên hiện tại bị đăng xuất.
+- [x] `request-types`: schema, validation (`formFieldSchema`, `buildFormValidator()` dùng ở cả client và server), query, action
+- [x] `/administrator/request-types` (tạo, bật/tắt), `/[typeId]` (thông tin chung), `/[typeId]/form` (form builder kéo thả, 6 kiểu trường), `/[typeId]/steps` (bước duyệt kéo thả, lưu cả danh sách trong một transaction, khóa khi loại đơn còn đơn `PENDING`)
+- [x] Seed demo: Nghỉ phép (1 bước), Thanh toán công tác (QL → Kế toán → CFO, có hạng mục), Mua sắm thiết bị IT (QL → CEO, có hạng mục)
 
-### Giai đoạn 5 — Cấu hình quy trình (UC-09, UC-10)
+### Giai đoạn 6 — Tạo đơn (UC-02) ✅
 
-- [ ] Module `request-types`: schema 2 bảng, validation (gồm zod schema cho chính `formSchema`)
-- [ ] Định nghĩa `formSchema`: mảng trường `{ key, label, type: text | textarea | number | date | dateRange | select, required, options? }`. Hàm `buildFormValidator(formSchema)` trả zod schema để validate `formData` (dùng ở cả client và server)
-- [ ] Trang `/administrator/request-types`: danh sách, tạo, bật/tắt
-- [ ] `/administrator/request-types/[typeId]/form`: thêm/sửa trường, sắp xếp bằng dnd-kit, xem trước form
-- [ ] `/administrator/request-types/[typeId]/steps`: thêm bước (MANAGER hoặc ROLE + chọn vai trò), sắp xếp bằng dnd-kit; lưu lại `stepOrder` trong một transaction; chặn sửa khi loại đơn có đơn `PENDING`
-- [ ] Seed mẫu: Nghỉ phép (1 bước MANAGER), Thanh toán (MANAGER → accountant → cfo, có hạng mục), Mua sắm IT (MANAGER → ceo, có hạng mục)
+- [x] `requests`: schema, validation, query, action `createDraft` / `updateDraft` / `deleteDraft`; tổng tiền tính bằng SQL từ cột `amount` (cột tính toán), không tin số client gửi
+- [x] Form tạo đơn: chọn loại → form động, bảng hạng mục (TanStack Table v9: `useTable` + `tableFeatures({})` + `table.FlexRender`), lộ trình duyệt, tệp đính kèm; "Lưu nháp" chỉ bắt buộc loại/tiêu đề/lý do, "Gửi duyệt" kiểm tra đủ
+- [x] Tệp đính kèm: `uploadAttachment` là **server action thường** (tự kiểm tra phiên + zod, trả `[data, error]` như zsa) vì zsa `type: "formData"` hỏng với zod 4; lưu ở `uploads/` qua `storage.lib.ts`, tên file trên đĩa là uuidv7
+- [x] `api/files/[fileId]`: chỉ người làm đơn, người duyệt liên quan (kể cả qua ủy quyền) hoặc admin tải được; PDF/ảnh mở inline, còn lại tải về; tên file tiếng Việt mã hóa RFC 5987
 
-**Xong khi:** tạo được loại đơn có 3 trường và 2 bước, đổi thứ tự bằng kéo thả rồi tải lại trang vẫn đúng thứ tự.
+### Giai đoạn 7 — Quy trình duyệt (UC-04 → UC-07) ✅
 
-### Giai đoạn 6 — Tạo đơn (UC-02)
+- [x] `approvals.service.ts` + 16 unit test (`npm test`)
+- [x] `submitRequest`, `approveRequest`, `rejectRequest`, `cancelRequest`: một transaction mỗi action, `SELECT ... FOR UPDATE`, ghi thông báo trong cùng transaction; mã đơn `REQ-<năm>-<số>` từ `request_counters`
+- [x] Không ai tự duyệt đơn của mình (kể cả khi giữ vai trò của bước, kể cả qua ủy quyền của chính mình). Bước không tìm được người duyệt → lỗi rõ ràng, transaction rollback, không tạo lượt treo
+- [x] Trang chờ duyệt (tô đỏ quá hạn), chi tiết đơn + thanh Duyệt/Từ chối (dính đáy trên điện thoại), lịch sử duyệt; trang đơn của tôi có dòng thời gian (Motion) và nút hủy
+- [x] G4 điều chỉnh: đơn nháp thì **xóa** (`deleteDraft`), chỉ đơn `PENDING` mới **hủy** (ràng buộc DB yêu cầu đơn khác `DRAFT` phải có mã)
 
-- [ ] Module `requests`: schema 4 bảng, validation, query (`getRequest`, `listMyRequests`), action (`createDraft`, `updateDraft`, `deleteDraft`), `requests.constant.ts` (nhãn + màu trạng thái)
-- [ ] `src/shared/libs/storage.lib.ts`: `saveFile`, `readFile`, `deleteFile` trên thư mục `DEFEAT_UPLOAD_DIRECTORY`; tên file trên đĩa là `uuidv7`, không dùng tên người dùng gửi lên
-- [ ] Action upload tệp: kiểm tra loại và dung lượng (G8), chỉ chủ đơn và đơn còn `DRAFT`
-- [ ] `src/app/api/files/[fileId]/route.ts`: cho tải nếu là người làm đơn, người duyệt có lượt trên đơn (kể cả qua ủy quyền), hoặc admin
-- [ ] Component `request-form.tsx`: chọn loại → hiện form động + lộ trình các bước duyệt (antd `Steps`) + vùng tải tệp
-- [ ] Component `line-items-table.tsx` (TanStack Table): thêm/xóa dòng, sửa ô, cột Thành tiền và dòng Tổng tự tính phía client để hiển thị
-- [ ] Trang `/workspace/requests/new`, `/workspace/requests/[requestId]/edit`
-- [ ] Lỗi validate hiện đỏ đúng trường, giữ nguyên dữ liệu đã nhập (UC-02 luồng 8a)
+### Giai đoạn 8 — Theo dõi và thông báo (UC-01, UC-03) ✅
 
-**Xong khi:** tạo đơn Thanh toán 3 hạng mục + 1 tệp, lưu nháp, mở lại sửa được; tổng tiền trong DB đúng bằng tổng cột tính toán; người khác tải tệp → 403.
+- [x] Đơn của tôi (lọc trạng thái/loại/từ khóa), tổng quan (thống kê theo trạng thái, 5 đơn gần nhất, thẻ "đơn chờ bạn duyệt")
+- [x] Chuông thông báo và badge "Chờ tôi duyệt": TanStack Query gọi server action, `refetchInterval` 30 giây; trang thông báo, đánh dấu đã đọc
+- [x] Không dùng `zsa-react-query`: `useQuery` gọi thẳng action zsa là đủ (package vẫn còn trong `package.json`, gỡ được)
 
-### Giai đoạn 7 — Quy trình duyệt (UC-04 → UC-07)
+### Giai đoạn 9 — Ủy quyền (UC-08) ✅
 
-- [ ] `approvals.service.ts` (hàm thuần): `resolveApprover(step, requester)`, `nextStep(steps, currentOrder)`, `canAct(approval, user, activeDelegations)`
-- [ ] Test cho service bằng `node:test` (`approvals.service.test.ts`, cài `tsx` vào devDependencies, script `test`: `tsx --test src/**/*.test.ts`): bước MANAGER, bước ROLE, không có quản lý, duyệt thay qua ủy quyền, ủy quyền hết hạn, bước cuối
-- [ ] `approvals.action.ts`: `submitRequest`, `approveRequest`, `rejectRequest`, `cancelRequest` — mỗi action một transaction, khóa dòng `FOR UPDATE` đơn và lượt, đúng bảng ở `ARCHITECTURE.md` mục 3; ghi `notifications` trong cùng transaction
-- [ ] `approvals.query.ts`: `canAccessApprovals(userId)`, `getPendingApprovals(userId)` (lượt `WAITING` của tôi + của vai trò tôi giữ + của người đang ủy quyền cho tôi), `getApprovalHistory(userId)`, `getApprovalTimeline(requestId)`, `countPendingApprovals(userId)`
-- [ ] Trang `/workspace/approvals` (bảng, tô đỏ lượt quá `dueAt`), `/workspace/approvals/[requestId]` (nội dung đơn, tệp, dòng thời gian, nút Duyệt / Từ chối; từ chối mở `Modal` bắt buộc lý do), `/workspace/approvals/history`
-- [ ] `/workspace/requests/[requestId]`: chi tiết + `approval-timeline.tsx` + nút Hủy (xác nhận trước)
+- [x] `delegations`: tạo (chỉ người có quyền duyệt: có vai trò duyệt hoặc có cấp dưới), hủy; trùng thời gian → exclusion constraint → `CONFLICT`; trạng thái `EXPIRED`/`UPCOMING` suy ra khi đọc
+- [x] Ủy quyền xét lúc đọc/duyệt; audit ghi `actedById` + `onBehalfOfId`; thông báo gửi cả người được ủy quyền đang hiệu lực
 
-**Xong khi:** đơn Thanh toán đi hết 3 bước bởi 3 tài khoản khác nhau và thành `APPROVED`; từ chối ở bước 2 thì dừng và người làm đơn thấy lý do; hai tab cùng bấm duyệt một lượt → chỉ một lần thành công, tab kia báo "lượt đã được xử lý"; test service qua hết.
+### Giai đoạn 10 — Giám sát và báo cáo ✅
 
-### Giai đoạn 8 — Theo dõi và thông báo (UC-01, UC-03)
-
-- [ ] `/workspace/requests`: bảng đơn của tôi, lọc theo trạng thái / loại / thời gian
-- [ ] `/workspace/dashboard`: số đơn theo trạng thái, 5 đơn gần nhất, số lượt chờ tôi duyệt
-- [ ] Module `notifications`: query (`listNotifications`, `countUnread`), action (`markRead`, `markAllRead`)
-- [ ] `notification-bell.tsx` trong topbar: TanStack Query + `zsa-react-query`, `refetchInterval` 30 giây, chỉ chạy khi tab đang mở
-- [ ] Badge số lượt chờ duyệt trên menu Phê duyệt (cùng cơ chế)
-- [ ] `/workspace/notifications`
-
-**Xong khi:** người duyệt thấy badge tăng trong vòng 30 giây sau khi có đơn gửi tới; bấm thông báo mở đúng đơn và chuyển thành đã đọc.
-
-### Giai đoạn 9 — Ủy quyền (UC-08)
-
-- [ ] Module `delegations`: schema (exclusion constraint), validation, query (`listMyDelegations`, `getActiveDelegatorsFor(userId)`), action (`createDelegation`, `cancelDelegation`)
-- [ ] Trang `/workspace/approvals/delegations`: tạo ủy quyền (chọn người, khoảng thời gian, lý do), danh sách kèm trạng thái (`EXPIRED` suy ra)
-- [ ] Nối vào `canAccessApprovals`, `getPendingApprovals`, `canAct` của giai đoạn 7 (test service đã có trường hợp ủy quyền)
-- [ ] Trang chi tiết lượt duyệt hiện "Duyệt thay <tên>" khi xử lý qua ủy quyền
-
-**Xong khi:** A ủy quyền cho B từ hôm nay → B thấy cả lượt của A tạo từ trước; B duyệt thì audit ghi `actedById = B`, `onBehalfOfId = A`; tạo ủy quyền chồng thời gian → báo lỗi.
-
-### Giai đoạn 10 — Giám sát và báo cáo (admin)
-
-- [ ] `/administrator/requests`: mọi đơn, lọc phòng ban / loại / trạng thái / quá hạn; xem chi tiết và toàn bộ audit trail
-- [ ] `/administrator/reports`: số đơn theo loại và trạng thái theo tháng, thời gian duyệt trung bình mỗi bước, tỷ lệ đúng SLA (tính bằng SQL, không kéo dữ liệu về rồi đếm)
-- [ ] `/administrator` (tổng quan): đơn đang chờ, lượt quá hạn SLA, người duyệt đang ôm nhiều lượt nhất
-
-**Xong khi:** số liệu báo cáo khớp với đếm tay trên dữ liệu seed.
+- [x] `/administrator`: đơn đang chờ, lượt quá hạn SLA, số người dùng/phòng ban/loại đơn, hàng đợi theo người duyệt và nhóm vai trò
+- [x] `/administrator/requests` (+ chi tiết, dòng thời gian), `/administrator/reports` (theo loại × trạng thái, 6 tháng gần nhất, thời gian xử lý trung bình theo bước, tỷ lệ đúng SLA; tính bằng SQL)
 
 ## 4. Kiểm thử
 
-- **Logic quy trình duyệt:** test `node:test` cho `approvals.service.ts` (giai đoạn 7). Đây là phần duy nhất có test tự động ở bản 1.0, vì sai ở đây là sai nghiệp vụ và khó thấy bằng mắt.
-- **Ràng buộc dữ liệu:** để DB giữ (check, unique, FK, exclusion, cột tính toán), không viết test riêng.
-- **Còn lại:** kiểm tra tay theo mục "Xong khi" của từng giai đoạn, trên dữ liệu seed.
-- Trước khi kết thúc mỗi giai đoạn: `npm run lint` và `npm run build` phải qua.
+**Unit test** (`npm test`, `node:test` qua `tsx`): 16/16 qua cho `approvals.service.ts`.
 
-## 5. Rủi ro
+**Kiểm thử đầu-cuối trên production build** (`next build` + `next start`, gọi server action qua HTTP với header `Next-Action`, đăng nhập bằng tài khoản demo), cả ba bộ đều qua:
+
+| Bộ | Nội dung |
+|---|---|
+| Luồng nghiệp vụ (48 kiểm tra) | Tổng tiền 5.000.000 đúng; tệp: upload PDF, chặn `.exe`, chủ đơn tải được, người lạ 404, chưa đăng nhập bị chặn, tên tiếng Việt đúng; gửi duyệt ra `REQ-2026-0001`, gửi lại bị chặn; duyệt 3 cấp tới `APPROVED`; **hai lần bấm duyệt đồng thời chỉ một lần thành công**; từ chối bắt buộc lý do, dừng quy trình; hủy đơn chờ; ủy quyền + duyệt thay ghi đúng audit; ủy quyền trùng thời gian bị chặn; không tự duyệt đơn mình; phân quyền trang |
+| Action quản trị (22 kiểm tra) | Nhân viên gọi action admin → `FORBIDDEN`; phòng ban trùng mã / còn người; tạo tài khoản (chuẩn hóa email, mã NV, vai trò), trùng email, vai trò lạ; vòng quản lý, tự quản lý, tự khóa, id không tồn tại; biểu mẫu trùng mã trường / lựa chọn rỗng; khóa bước khi còn đơn chờ; bước ROLE thiếu vai trò |
+| Render trang (21 trang) | Mọi trang của 2 portal render đủ nội dung ở server, log server không lỗi |
+
+Kiểm thử đầu-cuối tìm ra và đã sửa 3 lỗi: zsa `type: "formData"` hỏng với zod 4; `Layout.Content` dùng trong server component thành `undefined` (mọi trang phải render lại ở client); `updateUser` với id không tồn tại báo thành công.
+
+**Chưa kiểm:** giao diện trên trình duyệt thật (bố cục, kéo thả, hiển thị trên điện thoại). Các script kiểm thử nằm ngoài repo; muốn giữ lại thì chuyển vào `scripts/e2e/`.
+
+## 5. Rủi ro và lưu ý
 
 | Rủi ro | Cách xử lý |
 |---|---|
-| zsa 0.6 chỉ khai báo hỗ trợ zod 3 (đang chạy được với zod 4) | Gặp lỗi kiểu khi dùng tính năng zod 4 mới → dùng `zod/v3` cho riêng input của action, hoặc bỏ zsa, viết procedure bằng tay (`action.lib.ts` là chỗ duy nhất phải sửa) |
-| `cacheComponents` bắt mọi chỗ đọc session nằm trong `<Suspense>` | Làm đúng từ giai đoạn 2; build lỗi thì xem lại chỗ gọi `getSession()` |
-| Giả định G1–G9 sai so với nghiệp vụ thật | Chốt với người viết `docs.md` **trước giai đoạn 4** (lúc bắt đầu tạo bảng nghiệp vụ) |
-| Form động phức tạp dần (trường điều kiện, công thức) | Bản 1.0 chỉ 6 loại trường ở giai đoạn 5; thêm loại khi có loại đơn thật cần |
-| Lưu tệp trên ổ đĩa local không dùng được khi chạy nhiều instance | `storage.lib.ts` là chỗ duy nhất đọc/ghi tệp; chuyển sang S3 / R2 chỉ sửa file này |
+| zsa 0.6 viết cho zod 3 | Input JSON chạy được; input `formData` hỏng nên đã tránh. Action có schema `.refine()` lồng trong mảng thì zsa không suy được kiểu `input` → ép kiểu bằng `z.infer` (xem `request-types.action.ts`, `delegations.action.ts`). Muốn bỏ zsa thì chỉ sửa `action.lib.ts` và các `*.action.ts` |
+| Server component dùng component antd | Chỉ dùng export có tên (`Button`, `Tag`); **không** dùng `X.Y` (`Layout.Content`, `Descriptions.Item`...) và không dùng icon trong server component — đặt chúng trong component `"use client"` |
+| `cacheComponents` | Không dùng `new Date()` / `Math.random()` khi render ở phần tĩnh; `next dev` có cảnh báo "uncached data" ở layout portal (đọc session ngoài `<Suspense>` của segment) — không chặn build, xử lý sau nếu cần điều hướng tức thì |
+| Rate limit đăng nhập của better-auth (production) | Đúng ý đồ bảo mật; script tự động cần đợi rồi thử lại |
+| Danh sách người dùng / đơn lọc phía client | Đủ cho vài nghìn dòng; lớn hơn thì chuyển sang phân trang và lọc ở server (query nhận tham số từ `searchParams`) |
+| Đếm "chờ tôi duyệt" chạy lại cả truy vấn danh sách | Đủ ở quy mô nội bộ; chậm thì viết truy vấn `count` riêng |
+| Lưu tệp trên ổ đĩa local (`uploads/`) | Không dùng được khi chạy nhiều instance; `storage.lib.ts` là chỗ duy nhất đọc/ghi, chuyển S3/R2 chỉ sửa file này |
+| Chưa có email (G7) | Liên kết đặt lại mật khẩu chỉ in ra log server; thêm dịch vụ email ở `auth.lib.ts` và hàm `notify()` trong `approvals.action.ts` |
+| Giả định G1–G9 | Vẫn cần chốt với người viết `docs.md`; schema đang theo các giả định này |

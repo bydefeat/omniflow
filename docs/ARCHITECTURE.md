@@ -63,8 +63,7 @@ src/
 │   │       ├── layout.tsx           # requireRole("admin") → <AdministratorLayout>
 │   │       ├── page.tsx             # /administrator             tổng quan, đơn quá hạn SLA
 │   │       ├── departments/         # phòng ban
-│   │       ├── users/               # tài khoản, vai trò, phòng ban, quản lý trực tiếp
-│   │       │   └── [userId]/
+│   │       ├── users/               # tài khoản, vai trò, phòng ban, quản lý trực tiếp (sửa trong modal)
 │   │       ├── request-types/       # loại đơn                                            UC-09
 │   │       │   └── [typeId]/
 │   │       │       ├── form/        # cấu hình trường nhập liệu động (kéo thả)           UC-09
@@ -93,13 +92,11 @@ src/
     │   │   ├── authentication/
     │   │   ├── workspace/
     │   │   └── administrator/
-    │   └── ui/                      # Logo, PageHeader, EmptyState, UserAvatar...
+    │   └── ui/                      # Logo, PageHeader, PageSkeleton, UserAvatarMenu, SortableList (dnd-kit)
     ├── constants/
     │   ├── theme.constant.ts        # bảng màu + antd ThemeConfig (nguồn màu DUY NHẤT)
-    │   ├── navigation.constant.ts   # menu của từng portal (label, href, icon, role)
-    │   └── role.constant.ts         # "employee" | "approver" | "admin" + trang đích sau login
-    ├── hooks/
-    │   └── media-query.hook.ts      # export useMediaQuery
+    │   ├── navigation.constant.ts   # menu của từng portal (label, href, icon, access) — chỉ import từ client
+    │   └── role.constant.ts         # vai trò truy cập + vai trò chức năng + trang đích sau login
     ├── libs/
     │   ├── env.lib.ts               # parse các biến DEFEAT_* bằng zod
     │   ├── db.lib.ts                # drizzle client (casing snake_case) + schema từ modules/schema.ts
@@ -110,7 +107,10 @@ src/
     │   ├── role.lib.ts              # parseRoles(), hasRole(), getHomePath(), safeCallbackPath()
     │   ├── action.lib.ts            # ZSA procedure: authedProcedure, roleProcedure(role)
     │   ├── query-client.lib.ts      # tạo QueryClient (TanStack Query)
-    │   └── storage.lib.ts           # lưu / đọc file đính kèm
+    │   ├── storage.lib.ts           # lưu / đọc file đính kèm trong uploads/
+    │   ├── db-error.lib.ts          # pgErrorCode() + mã lỗi Postgres (unique, FK, exclusion)
+    │   ├── format.lib.ts            # formatMoney(), formatDate(), formatDateTime()
+    │   └── navigation.lib.ts        # findActiveItem(): mục menu đang chọn
     └── stores/                      # zustand CHỈ cho state UI
         └── sidebar.store.ts         # export useSidebarStore
 ```
@@ -123,7 +123,6 @@ Tên file dạng `<tên>.<loại>.ts`, phần `<tên>` viết kebab-case. Trong 
 |---|---|---|---|
 | Proxy | `*.proxy.ts` | `authentication.proxy.ts` | `authenticationProxy` |
 | Lib | `*.lib.ts` | `env.lib.ts`, `action.lib.ts` | `env`, `authedProcedure` |
-| Hook | `*.hook.ts` | `media-query.hook.ts` | `useMediaQuery` |
 | Constant | `*.constant.ts` | `theme.constant.ts`, `requests.constant.ts` | `THEME`, `REQUEST_STATUS_META` |
 | Store | `*.store.ts` | `sidebar.store.ts` | `useSidebarStore` |
 | Drizzle schema | `*.schema.ts` | `requests.schema.ts` | các bảng `requests`, `requestItems`... |
@@ -161,7 +160,8 @@ CDM không có khóa ngoại (đúng chuẩn Merise). Khóa ngoại được th�
 
 **Giữa các module:** khác hcmue-portal (module không import module), OmniFlow cho phép import có giới hạn, vì quy trình duyệt phải ghi nhiều bảng trong **một transaction** (gửi đơn = đổi trạng thái đơn + tạo lượt duyệt cấp 1 + tạo thông báo). Ghép ở `app` thì không giữ được transaction.
 
-- Chỉ được import `*.schema.ts`, `*.query.ts` và `*.constant.ts` của module khác. **Không** import `*.action.ts` hay `components/` của module khác.
+- Chỉ được import `*.schema.ts`, `*.query.ts`, `*.constant.ts`, `*.validation.ts` và `*.service.ts` của module khác. **Không** import `*.action.ts` hay `components/` của module khác.
+- Server action của module khác cần dùng trong component (ví dụ form tạo đơn ở `requests` cần `submitRequest` của `approvals`) thì page ở `app` truyền action đó xuống làm prop.
 - Chỉ import theo chiều mũi tên dưới đây (không vòng):
 
 ```
@@ -208,7 +208,7 @@ Tiền luôn tính lại ở server (`ThanhTien = SoLuong × DonGia`, `TongTien 
 
 - **3 layout độc lập**, mỗi layout một folder, **không import lẫn nhau** và không có "BaseLayout" chung.
 - **Thứ duy nhất dùng chung là màu sắc:** tất cả đọc từ `shared/constants/theme.constant.ts`. Không hardcode mã màu trong layout.
-- Phần dùng chung thật sự nhỏ (Logo, avatar menu, chuông thông báo) đặt ở `shared/components/ui/` hoặc `modules/notifications/components/`, layout chỉ ghép vào.
+- Phần dùng chung thật sự nhỏ (Logo, avatar menu) đặt ở `shared/components/ui/`. Phần thuộc module (chuông thông báo, badge số đơn chờ duyệt) do `app/.../layout.tsx` truyền vào qua prop `headerExtra` / `badges`, nên `shared` không import `modules`.
 - `app/.../layout.tsx` chỉ làm 2 việc: kiểm tra quyền và render layout tương ứng.
 
 ### Bảng màu
@@ -262,8 +262,9 @@ Mỗi folder chỉ export `index.tsx`. Menu lấy từ `shared/constants/navigat
 | Vai trò | Plugin `admin` của better-auth, một user nhiều role (`employee`, `approver`, `admin`). Mọi tài khoản đều có `employee` | Đúng quan hệ kế thừa ở docs.md 2.1. Admin cũng tạo đơn được |
 | Quyền mục Phê duyệt | `canAccessApprovals()` đặt ở `approvals.query.ts`, không ở `shared` | Phụ thuộc dữ liệu ủy quyền, là nghiệp vụ |
 | Sau đăng nhập | `admin` → `/administrator`, còn lại → `/workspace/dashboard` (khai báo ở `role.constant.ts`) | |
-| Server action | ZSA: `createServerActionProcedure` cho session/role, `.input(zodSchema)` cho dữ liệu | Validate và kiểm quyền một chỗ, lỗi trả về có kiểu |
-| Dữ liệu server | Mặc định: server component gọi `*.query.ts`. **TanStack Query chỉ dùng** cho dữ liệu client cần tự làm mới: badge thông báo, số đơn chờ duyệt, bảng phân trang/lọc phía client (qua `zsa-react-query`) | Không đồng bộ một dữ liệu ở hai nơi khi không cần |
+| Server action | ZSA: `createServerActionProcedure` cho session/role, `.input(zodSchema)` cho dữ liệu. Ngoại lệ: `uploadAttachment` là server action thường (tự kiểm phiên + zod, vẫn trả `[data, error]`) vì zsa `type: "formData"` hỏng với zod 4 | Validate và kiểm quyền một chỗ, lỗi trả về có kiểu |
+| Dữ liệu server | Mặc định: server component gọi `*.query.ts`. **TanStack Query chỉ dùng** cho dữ liệu client cần tự làm mới (chuông thông báo, số đơn chờ duyệt), `queryFn` gọi thẳng action zsa | Không đồng bộ một dữ liệu ở hai nơi khi không cần |
+| Component antd trong server component | Chỉ dùng export có tên (`Button`, `Tag`); không dùng `X.Y` (`Layout.Content`...) hay icon — đặt trong component `"use client"` | Từ server, client component chỉ là tham chiếu theo tên export; thuộc tính tĩnh thành `undefined` |
 | State UI | `zustand` chỉ giữ state UI (sidebar, bộ lọc đang chọn) | |
 | Bảng | antd `Table` cho mọi bảng danh sách. **TanStack Table** chỉ cho bảng hạng mục chi tiết sửa trực tiếp (thêm/xóa dòng, cột Thành tiền tự tính) | antd Table đủ cho bảng đọc; bảng sửa inline cần kiểm soát dòng/ô mà antd làm cồng kềnh |
 | Kéo thả | dnd-kit cho sắp xếp bước duyệt (UC-10) và trường form (UC-09) | |
