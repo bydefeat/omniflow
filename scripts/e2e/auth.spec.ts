@@ -130,3 +130,20 @@ test("đăng nhập sai 5 lần thì tài khoản bị khóa tạm, admin đặt
     await sql`delete from sign_in_failures where email = ${email}`;
   }
 });
+
+test("form đăng nhập báo khóa tạm bằng tiếng Việt", async ({ page }) => {
+  const email = USERS.ceo.email;
+  await sql`
+    insert into sign_in_failures (email, ip_address, failures, first_failed_at)
+    select ${email}, ip, 6, now() from unnest(array['', '127.0.0.1', '::1']) as ip
+    on conflict (email, ip_address) do update set failures = 6, first_failed_at = now()`;
+  try {
+    await page.goto("/authentication/sign-in");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Mật khẩu").fill(USERS.ceo.password);
+    await page.getByRole("button", { name: "Đăng nhập" }).click();
+    await expect(page.getByText(/Đăng nhập sai quá 5 lần\. Vui lòng thử lại sau \d+ phút\./)).toBeVisible();
+  } finally {
+    await sql`delete from sign_in_failures where email = ${email}`;
+  }
+});
