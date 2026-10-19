@@ -13,7 +13,7 @@ import {
 
 import { id, timestamps } from "@/shared/libs/schema.lib";
 
-export type FormField = Record<string, unknown>;
+import type { FormField } from "./request-types.validation";
 
 export const requestTypes = pgTable(
   "request_types",
