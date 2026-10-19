@@ -11,7 +11,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
-    "test": "tsx --test \"src/**/*.test.ts\""
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test:e2e": "playwright test -c scripts/e2e"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
@@ -38,6 +39,7 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "8.0.2",

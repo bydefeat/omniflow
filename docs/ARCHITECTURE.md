@@ -190,10 +190,13 @@ DRAFT ──submit──▶ PENDING ──duyệt bước cuối──▶ APPROV
 
 | Action | Việc làm trong một transaction |
 |---|---|
-| `submitRequest` | Kiểm tra đơn là DRAFT của chính người gọi → tính lại `TongTien` từ hạng mục → `PENDING` → tạo lượt cho bước 1 → thông báo người duyệt |
-| `approveRequest` | Khóa lượt (`SELECT ... FOR UPDATE`), kiểm tra `WAITING` và đúng người duyệt → `APPROVED`. Còn bước sau: tạo lượt kế tiếp. Hết bước: đơn `APPROVED`, thông báo người làm đơn |
+| `submitRequest` | Kiểm tra đơn là DRAFT của chính người gọi → khóa chia sẻ dòng loại đơn, chụp `formSchema`/`hasLineItems`/`slaHours`/bước duyệt vào `requests.snapshot` → `PENDING` → tạo lượt cho bước 1 → thông báo người duyệt |
+| `approveRequest` | Khóa đơn rồi khóa lượt (`SELECT ... FOR UPDATE`), kiểm tra `WAITING` và đúng người duyệt → `APPROVED`. Bước kế tiếp lấy từ `snapshot`, không đọc cấu hình hiện tại. Hết bước: đơn `APPROVED`, thông báo người làm đơn |
 | `rejectRequest` | Như trên, bắt buộc `YKienPhanHoi` (zod) → lượt `REJECTED`, đơn `REJECTED`, dừng quy trình, thông báo kèm lý do |
-| `cancelRequest` | Chỉ người làm đơn, đơn đang DRAFT hoặc PENDING → `CANCELLED`, các lượt `WAITING` → `CANCELLED` |
+| `cancelRequest` | Chỉ người làm đơn, đơn đang PENDING → `CANCELLED`, các lượt `WAITING` → `CANCELLED`, báo người duyệt (kể cả người giữ vai trò và người được ủy quyền) |
+| `reassignApproval` | Chỉ admin. Giao lượt `WAITING` cho một người cụ thể khi người duyệt bị khóa hoặc không còn ai giữ vai trò; ghi `reassignedById`, `reassignedAt` |
+
+**Thứ tự khóa:** mọi action ghi đơn khóa dòng `requests` trước, rồi mới tới `approvals`, để không deadlock. Sửa / xóa nháp và thêm / xóa tệp khóa dòng đơn đang `DRAFT` trong transaction, nên không chạm được đơn vừa gửi.
 
 **Xác định người duyệt** (`resolveApprover()` trong `approvals.service.ts`), chạy khi tạo mỗi lượt:
 1. Bước có `KieuNguoiDuyet = MANAGER` → gán `approverId` = `managerId` của người làm đơn. Bước `ROLE` → gán `approverRole`, mọi người có vai trò đó đều thấy lượt này, ai xử lý trước thì lượt thuộc về người đó (khóa dòng chặn hai người cùng duyệt).
@@ -274,7 +277,8 @@ Mỗi folder chỉ export `index.tsx`. Menu lấy từ `shared/constants/navigat
 | Form động (UC-09) | `requestTypes.formSchema` (jsonb) mô tả các trường; `requests.formData` (jsonb) lưu giá trị. Server dựng zod schema từ `formSchema` để validate | Thêm loại đơn không cần migration |
 | Tệp đính kèm | Lưu qua `storage.lib.ts` (ổ đĩa local khi dev), chỉ tải được qua `api/files/[fileId]` có kiểm quyền | Hóa đơn, báo giá là dữ liệu nhạy cảm, không để URL công khai |
 | Audit trail | Bảng `approvals` là vết kiểm toán: ai, lúc nào, kết quả, ý kiến, duyệt thay ai. Không xóa, không sửa lượt đã xử lý | Yêu cầu chống gian lận ở docs.md chương 1 |
-| Biến môi trường | Tiền tố `DEFEAT_*`, xem `.env.example`, parse ở `env.lib.ts` | Giống hcmue-portal. better-auth phải truyền `secret`, `baseURL` khi khởi tạo |
+| Bản chụp quy trình | Lúc gửi, `requests.snapshot` giữ biểu mẫu, cờ hạng mục, SLA và các bước; chi tiết đơn, dòng thời gian và bước kế tiếp đều đọc từ đây | Admin sửa loại đơn sau đó không làm đổi đơn đang chạy hay đã xong |
+| Biến môi trường | Tiền tố `DEFEAT_*`, xem `.env.example`, parse ở `env.lib.ts`. SMTP (`DEFEAT_SMTP_CONNECTION_URL`) tùy chọn | Giống hcmue-portal. better-auth phải truyền `secret`, `baseURL` khi khởi tạo |
 | `cacheComponents` | Đang bật: code đọc `cookies()`/`headers()` phải nằm trong `<Suspense>` | Nếu không, build sẽ lỗi |
 
 ## 6. Điểm cần chốt lại trong docs.md
