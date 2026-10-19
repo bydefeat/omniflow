@@ -92,7 +92,7 @@ sudo systemctl enable --now omniflow omniflow-mail.timer omniflow-sla.timer omni
 
 - `omniflow.service`: chạy `node` trực tiếp ở `127.0.0.1:3000` (không qua `npm`) để SIGTERM tới được Next; chờ tối đa 30 giây khi dừng. Nếu `which node` / `which npm` không phải `/usr/bin/...` thì sửa `ExecStart` trong các file `.service`.
 - `omniflow-mail.timer`: mỗi 5 phút gửi email còn tồn (email lỗi được thử lại tối đa 8 lần, giãn dần).
-- `omniflow-sla.timer`: thứ 2 đến thứ 7, mỗi giờ từ 8:05 đến 17:05 chạy `npm run sla:remind`, gửi thông báo (và email nếu có SMTP) cho người duyệt các lượt vừa quá hạn. Mỗi lượt chỉ nhắc một lần; admin giao lại lượt đó thì người mới được nhắc lại.
+- `omniflow-sla.timer`: thứ 2 đến thứ 7, mỗi giờ từ 8:05 đến 17:05 giờ Việt Nam (timer ghi rõ `Asia/Ho_Chi_Minh`, máy chủ để UTC vẫn đúng) chạy `npm run sla:remind`, gửi thông báo (và email nếu có SMTP) cho người duyệt các lượt vừa quá hạn. Mỗi lượt chỉ nhắc một lần; admin giao lại lượt đó thì người mới được nhắc lại.
 - `omniflow-backup.timer`: 02:30 hằng ngày chạy `scripts/backup.sh`, giữ 14 ngày.
 
 Xem log: `journalctl -u omniflow -f`. Ở production mỗi dòng log của ứng dụng là một object JSON (`time`, `level`, `message` và các trường khác), lọc được bằng `journalctl -u omniflow -o cat | jq 'select(.level == "error")'`.

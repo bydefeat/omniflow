@@ -19,7 +19,7 @@ export default async function AdminRequestsPage({ searchParams }: PageProps<"/ad
       <PageHeader
         title="Đơn yêu cầu"
         subtitle={`${total} đơn đã gửi`}
-        extra={<ExportRequestsButton filters={filters} disabled={total === 0} />}
+        extra={<ExportRequestsButton filters={filters} total={total} />}
       />
       <RequestsTable
         rows={rows}
