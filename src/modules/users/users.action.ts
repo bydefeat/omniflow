@@ -82,7 +82,7 @@ export const updateUser = adminProcedure
     }
     await assertNoManagerCycle(input.id, input.managerId);
 
-    await db
+    const updated = await db
       .update(user)
       .set({
         name: input.name,
@@ -92,12 +92,16 @@ export const updateUser = adminProcedure
         role: serializeRoles(input.roles).join(","),
       })
       .where(eq(user.id, input.id))
+      .returning({ id: user.id })
       .catch((error) => {
-        if (pgErrorCode(error) === PG_ERRORS.UNIQUE) {
-          throw new ZSAError("CONFLICT", "Mã nhân viên đã tồn tại");
+        const code = pgErrorCode(error);
+        if (code === PG_ERRORS.UNIQUE) throw new ZSAError("CONFLICT", "Mã nhân viên đã tồn tại");
+        if (code === PG_ERRORS.FOREIGN_KEY) {
+          throw new ZSAError("UNPROCESSABLE_CONTENT", "Phòng ban hoặc quản lý được chọn không tồn tại");
         }
         throw error;
       });
+    if (updated.length === 0) throw new ZSAError("NOT_FOUND", "Không tìm thấy người dùng");
   });
 
 export const setUserBanned = adminProcedure

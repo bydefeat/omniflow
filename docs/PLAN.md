@@ -2,13 +2,26 @@
 
 Kế hoạch chi tiết theo lộ trình ở `ARCHITECTURE.md` mục 7. Mỗi giai đoạn có danh sách việc (kèm file) và tiêu chí xong. Làm tuần tự: giai đoạn sau dùng kết quả giai đoạn trước.
 
-## 0. Hiện trạng (2026-10-19)
+## 0. Hiện trạng (2026-10-19): đã xong cả 10 giai đoạn
 
-- [x] Next.js 16.4.2, React 19.3, TypeScript, Tailwind 4; `next.config.ts` bật `cacheComponents`, `partialPrefetching`.
-- [x] Đã cài: antd 6, @ant-design/icons, @ant-design/nextjs-registry, motion, drizzle-orm + drizzle-kit + drizzle-zod, postgres (driver), better-auth, zod 4, zsa + zsa-react-query, zustand, @tanstack/react-query, @tanstack/react-table, @dnd-kit (core, sortable, utilities), uuidv7.
-- [x] `.npmrc` có `legacy-peer-deps=true` (giống hcmue-portal): zsa 0.6 khai báo peer `zod@^3` nhưng **đã kiểm tra chạy đúng với zod 4** (parse input, trả lỗi `INPUT_PARSE_ERROR`, suy kiểu đúng).
-- [ ] npm đang chặn script cài đặt của `esbuild`, `unrs-resolver`. Nếu `drizzle-kit` hoặc ESLint báo lỗi thiếu binary thì chạy `npm approve-scripts esbuild unrs-resolver`.
-- [ ] `src/` vẫn là template mặc định của create-next-app.
+- [x] Next.js 16.4.2, React 19.3, TypeScript, Tailwind 4; `next.config.ts` bật `cacheComponents`, `partialPrefetching`, `authInterrupts`, giới hạn body server action / proxy 11 MB.
+- [x] Đã cài: antd 6, @ant-design/icons, @ant-design/nextjs-registry, motion, drizzle-orm + drizzle-kit + drizzle-zod, postgres (driver), better-auth, zod 4, zsa + zsa-react-query, zustand, @tanstack/react-query, @tanstack/react-table v9, @dnd-kit (core, sortable, utilities), uuidv7, tsx.
+- [x] `.npmrc` có `legacy-peer-deps=true` (giống hcmue-portal) vì zsa 0.6 khai báo peer `zod@^3`. Với input JSON thì zsa chạy đúng với zod 4. **Input `type: "formData"` của zsa hỏng với zod 4** (`a.unwrap is not a function`), nên upload tệp dùng server action thường (xem giai đoạn 6).
+- [x] Toàn bộ 10 giai đoạn đã làm và kiểm thử, kết quả ở mục 4.
+
+### Chạy dự án
+
+```bash
+npm install
+cp .env.example .env            # điền secret (>= 32 ký tự) và mật khẩu admin seed
+npm run db:migrate
+npm run db:seed                 # phòng ban Ban Giám đốc + tài khoản admin
+npm run db:seed -- --demo       # thêm 5 tài khoản demo (mật khẩu Omniflow@123) và 3 loại đơn
+npm run dev
+npm test                        # unit test quy trình duyệt
+```
+
+Tài khoản demo: `ceo@`, `cfo@`, `truongphong.it@`, `ketoan@`, `nhanvien.it@` (đuôi `omniflow.local`). Quan hệ quản lý: nhân viên IT → trưởng phòng IT → CEO; kế toán → CFO → CEO.
 
 ## 1. Giả định đang dùng
 
