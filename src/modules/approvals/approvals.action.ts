@@ -3,6 +3,7 @@
 import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { after } from "next/server";
 
+import { recordAudit } from "@/modules/audit/audit.service";
 import { getActiveDelegates } from "@/modules/delegations/delegations.query";
 import { notifications } from "@/modules/notifications/notifications.schema";
 import { approvalSteps, requestTypes } from "@/modules/request-types/request-types.schema";
@@ -507,7 +508,10 @@ export const reassignApproval = roleProcedure(ROLES.ADMIN)
       if (input.approverId === row.requesterId) {
         throw new ActionError("UNPROCESSABLE_CONTENT", "Không thể giao cho chính người làm đơn");
       }
-      const [assignee] = await tx.select({ banned: user.banned }).from(user).where(eq(user.id, input.approverId));
+      const [assignee] = await tx
+        .select({ banned: user.banned, name: user.name })
+        .from(user)
+        .where(eq(user.id, input.approverId));
       if (!assignee || assignee.banned) {
         throw new ActionError("UNPROCESSABLE_CONTENT", "Người được chọn không tồn tại hoặc đã bị khóa");
       }
@@ -515,6 +519,16 @@ export const reassignApproval = roleProcedure(ROLES.ADMIN)
         .update(approvals)
         .set({ approverId: input.approverId, approverRole: null, reassignedById: ctx.user.id, reassignedAt: new Date() })
         .where(eq(approvals.id, row.id));
+      await recordAudit(tx, ctx.user, {
+        action: "APPROVAL_REASSIGNED",
+        targetType: "approval",
+        targetId: row.id,
+        summary: `${row.code} · ${row.stepName} → ${assignee.name}`,
+        changes: {
+          approverId: { from: row.approverId, to: input.approverId },
+          approverRole: { from: row.approverRole, to: null },
+        },
+      });
       await notify(tx, outbox, await withDelegates([input.approverId], row.requesterId), {
         type: "APPROVAL_NEEDED",
         title: `${row.code} được giao cho bạn duyệt (${row.stepName}): ${row.title}`.slice(0, 200),

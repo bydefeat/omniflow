@@ -43,6 +43,13 @@
       "when": 1792425637302,
       "tag": "0005_email_outbox",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792429212410,
+      "tag": "0006_audit_logs",
+      "breakpoints": true
     }
   ]
 }

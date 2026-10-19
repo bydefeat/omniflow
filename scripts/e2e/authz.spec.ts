@@ -9,6 +9,7 @@ const adminPages = [
   { path: "/administrator/requests", link: "Đơn yêu cầu" },
   { path: "/administrator/reports", link: "Báo cáo" },
   { path: "/administrator/request-types", link: "Loại đơn" },
+  { path: "/administrator/audit-log", link: "Nhật ký quản trị" },
 ];
 
 test("nhân viên mở trực tiếp trang quản trị thì bị chặn", async ({ browser }) => {

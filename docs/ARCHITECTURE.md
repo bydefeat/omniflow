@@ -69,7 +69,8 @@ src/
 │   │       │       ├── form/        # cấu hình trường nhập liệu động (kéo thả)           UC-09
 │   │       │       └── steps/       # các bước duyệt theo thứ tự (kéo thả)               UC-10
 │   │       ├── requests/            # giám sát toàn bộ đơn, xem audit trail
-│   │       └── reports/             # thống kê, tỷ lệ đúng SLA
+│   │       ├── reports/             # thống kê, tỷ lệ đúng SLA
+│   │       └── audit-log/           # nhật ký thao tác quản trị (ai, lúc nào, đổi gì, IP)
 │   │
 │   └── api/
 │       ├── auth/[...all]/route.ts   # handler của better-auth
@@ -83,7 +84,8 @@ src/
 │   ├── requests/                    #   requests.query.ts       hàm đọc dữ liệu (server)
 │   ├── approvals/                   #   requests.action.ts      server action (action.lib.ts)
 │   ├── delegations/                 #   requests.constant.ts    nhãn + màu trạng thái
-│   └── notifications/               #   components/             UI riêng của module
+│   ├── notifications/               #   components/             UI riêng của module
+│   └── audit/                       # nhật ký quản trị: recordAudit() ghi trong cùng transaction
 │
 └── shared/                          # KHÔNG chứa nghiệp vụ; ai cũng import được
     ├── components/
@@ -153,6 +155,7 @@ Ngoại lệ: file mà Next.js quy định tên (`proxy.ts`, `layout.tsx`, `page
 | `approvals` | LUOT_PHE_DUYET | `approvals` | UC-04 → UC-07, chuyển trạng thái đơn |
 | `delegations` | UY_QUYEN | `delegations` | UC-08 |
 | `notifications` | (không có trong CDM, từ UC-01) | `notifications` | UC-01 |
+| `audit` | (không có trong CDM, yêu cầu vận hành) | `audit_logs` | nhật ký thao tác quản trị |
 
 `MatKhau` của NGUOI_DUNG không nằm trong bảng `user`: better-auth lưu mật khẩu đã băm ở bảng `account`.
 
@@ -176,6 +179,7 @@ departments ← users ← request-types ← requests ← approvals
                            notifications ←──────────┘
 ```
 
+- `audit` là module lá: không import module nào (`actor_id` không có khóa ngoại để tránh vòng `users` ↔ `audit`), mọi module có thao tác quản trị đều được gọi `recordAudit()` trong `audit.service.ts`, truyền `tx` để nhật ký và thay đổi cùng commit hoặc cùng rollback.
 - Cần dữ liệu chéo chỉ để **hiển thị** (ví dụ trang chi tiết đơn = thông tin đơn + dòng thời gian duyệt) thì vẫn để `app` ghép: page gọi `getRequest()` của `requests` và `getApprovalTimeline()` của `approvals`.
 
 ### Quy trình duyệt (module `approvals`)
