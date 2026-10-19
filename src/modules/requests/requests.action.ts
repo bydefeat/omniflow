@@ -7,6 +7,7 @@ import { requestTypes } from "@/modules/request-types/request-types.schema";
 import { buildFormValidator } from "@/modules/request-types/request-types.validation";
 import { authedProcedure } from "@/shared/libs/action.lib";
 import { db } from "@/shared/libs/db.lib";
+import { getSession } from "@/shared/libs/session.lib";
 import { deleteStoredFile, saveFile } from "@/shared/libs/storage.lib";
 
 import {
@@ -135,47 +136,69 @@ export const deleteDraft = authedProcedure
     await Promise.all(files.map((f) => deleteStoredFile(f.storageKey)));
   });
 
-export const uploadAttachment = authedProcedure
-  .createServerAction()
-  .input(attachmentUploadInput, { type: "formData" })
-  .handler(async ({ input, ctx }) => {
-    const draft = await findOwnDraft(input.requestId, ctx.user.id);
-    const { file } = input;
-    if (file.size === 0) throw new ZSAError("UNPROCESSABLE_CONTENT", "Tệp rỗng");
-    if (file.size > ATTACHMENT_MAX_BYTES) {
-      throw new ZSAError("PAYLOAD_TOO_LARGE", "Tệp vượt quá 10 MB");
-    }
-    if (!ATTACHMENT_MIME_TYPES.includes(file.type)) {
-      throw new ZSAError("UNPROCESSABLE_CONTENT", "Chỉ nhận PDF, ảnh, Word hoặc Excel");
-    }
-    const [{ total }] = await db
-      .select({ total: count() })
-      .from(attachments)
-      .where(eq(attachments.requestId, draft.id));
-    if (total >= ATTACHMENT_MAX_COUNT) {
-      throw new ZSAError("PRECONDITION_FAILED", `Tối đa ${ATTACHMENT_MAX_COUNT} tệp mỗi đơn`);
-    }
+type UploadError = { code: string; message: string };
 
-    const storageKey = await saveFile(new Uint8Array(await file.arrayBuffer()));
-    const [created] = await db
-      .insert(attachments)
-      .values({
-        requestId: draft.id,
-        fileName: file.name.slice(0, 255),
-        storageKey,
-        mimeType: file.type,
-        sizeBytes: file.size,
-        uploadedById: ctx.user.id,
-      })
-      .returning({
-        id: attachments.id,
-        fileName: attachments.fileName,
-        mimeType: attachments.mimeType,
-        sizeBytes: attachments.sizeBytes,
-        uploadedAt: attachments.uploadedAt,
-      });
-    return created;
+export async function uploadAttachment(
+  formData: FormData,
+): Promise<readonly [AttachmentResult, null] | readonly [null, UploadError]> {
+  const session = await getSession();
+  if (!session) return [null, { code: "NOT_AUTHORIZED", message: "Phiên đăng nhập đã hết hạn" }];
+
+  const parsed = attachmentUploadInput.safeParse({
+    requestId: formData.get("requestId"),
+    file: formData.get("file"),
   });
+  if (!parsed.success) return [null, { code: "INPUT_PARSE_ERROR", message: "Dữ liệu tải lên không hợp lệ" }];
+
+  try {
+    return [await saveAttachment(parsed.data.requestId, parsed.data.file, session.user.id), null];
+  } catch (error) {
+    if (error instanceof ZSAError) {
+      return [null, { code: error.code, message: typeof error.data === "string" ? error.data : error.message }];
+    }
+    throw error;
+  }
+}
+
+type AttachmentResult = Awaited<ReturnType<typeof saveAttachment>>;
+
+async function saveAttachment(requestId: string, file: File, userId: string) {
+  const draft = await findOwnDraft(requestId, userId);
+  if (file.size === 0) throw new ZSAError("UNPROCESSABLE_CONTENT", "Tệp rỗng");
+  if (file.size > ATTACHMENT_MAX_BYTES) {
+    throw new ZSAError("PAYLOAD_TOO_LARGE", "Tệp vượt quá 10 MB");
+  }
+  if (!ATTACHMENT_MIME_TYPES.includes(file.type)) {
+    throw new ZSAError("UNPROCESSABLE_CONTENT", "Chỉ nhận PDF, ảnh, Word hoặc Excel");
+  }
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(attachments)
+    .where(eq(attachments.requestId, draft.id));
+  if (total >= ATTACHMENT_MAX_COUNT) {
+    throw new ZSAError("PRECONDITION_FAILED", `Tối đa ${ATTACHMENT_MAX_COUNT} tệp mỗi đơn`);
+  }
+
+  const storageKey = await saveFile(new Uint8Array(await file.arrayBuffer()));
+  const [created] = await db
+    .insert(attachments)
+    .values({
+      requestId: draft.id,
+      fileName: file.name.slice(0, 255),
+      storageKey,
+      mimeType: file.type,
+      sizeBytes: file.size,
+      uploadedById: userId,
+    })
+    .returning({
+      id: attachments.id,
+      fileName: attachments.fileName,
+      mimeType: attachments.mimeType,
+      sizeBytes: attachments.sizeBytes,
+      uploadedAt: attachments.uploadedAt,
+    });
+  return created;
+}
 
 export const deleteAttachment = authedProcedure
   .createServerAction()
