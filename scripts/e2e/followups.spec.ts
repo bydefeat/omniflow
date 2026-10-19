@@ -18,7 +18,7 @@ test("người chỉ được ủy quyền vào được trang ủy quyền, ng�
   let requestId: string | undefined;
   try {
     const page = await pageAs(browser, "employee");
-    await page.goto("/workspace/approvals/delegations");
+    await page.goto("/workspace/delegations");
     await expect(page.getByText("Tôi được ủy quyền")).toBeVisible();
     await expect(page.getByText("Tạo ủy quyền mới")).toHaveCount(0);
     await page.context().close();
@@ -84,12 +84,14 @@ test("tệp có nội dung không khớp định dạng bị từ chối khi t�
   try {
     const page = await pageAs(browser, "employee");
     await page.goto(`/workspace/requests/${draft!.id}/edit`);
-    await page.locator('input[type="file"]').setInputFiles({
-      name: "hoa_don.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("<html><script>alert(1)</script></html>"),
-    });
-    await expect(page.getByText(/hoa_don\.pdf: Nội dung hoặc đuôi tệp không khớp/)).toBeVisible();
+    await expect(async () => {
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "hoa_don.pdf",
+        mimeType: "application/pdf",
+        buffer: Buffer.from("<html><script>alert(1)</script></html>"),
+      });
+      await expect(page.getByText(/hoa_don\.pdf: Nội dung hoặc đuôi tệp không khớp/).first()).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 20_000 });
     expect(await sql`select id from attachments where request_id = ${draft!.id}`).toHaveLength(0);
     await page.context().close();
   } finally {
@@ -134,5 +136,43 @@ test("action quản trị báo lỗi rõ cho id không tồn tại và quản l�
     expect(deptError?.message).toBe("Phòng ban được chọn không tồn tại");
   } finally {
     await sql`update "user" set banned = false where id = ${accountant}`;
+  }
+});
+
+test("danh sách lọc và phân trang ở server theo tham số trên URL", async ({ browser }) => {
+  const [employee] = await sql`select id from "user" where email = ${USERS.employee.email}`;
+  const typeId = await requestTypeId("LEAVE");
+  const marker = `Phân trang ${Date.now()}`;
+  const ids = Array.from({ length: 23 }, () => uuidv7());
+  await sql`
+    insert into requests ${sql(
+      ids.map((id, i) => ({
+        id,
+        requester_id: employee.id,
+        request_type_id: typeId,
+        title: `${marker} #${String(i + 1).padStart(2, "0")}`,
+        reason: "E2E",
+      })),
+    )}`;
+  try {
+    const page = await pageAs(browser, "employee");
+    await page.goto(`/workspace/requests?q=${encodeURIComponent(marker)}`);
+    await expect(page.getByText("23 đề xuất")).toBeVisible();
+    await expect(page.locator("tbody tr").filter({ hasText: marker })).toHaveCount(20);
+    await page.goto(`/workspace/requests?q=${encodeURIComponent(marker)}&page=2`);
+    await expect(page.locator("tbody tr").filter({ hasText: marker })).toHaveCount(3);
+    await page.goto(`/workspace/requests?q=${encodeURIComponent(marker)}&status=PENDING`);
+    await expect(page.getByText("0 đề xuất")).toBeVisible();
+    await page.context().close();
+
+    const admin = await pageAs(browser, "admin");
+    await admin.goto("/administrator/users?q=ketoan");
+    await expect(admin.getByText("1 tài khoản")).toBeVisible();
+    await expect(admin.getByText(USERS.accountant.name)).toBeVisible();
+    await admin.goto(`/administrator/requests?q=${encodeURIComponent(marker)}`);
+    await expect(admin.getByText("0 đơn đã gửi")).toBeVisible();
+    await admin.context().close();
+  } finally {
+    await sql`delete from requests where id in ${sql(ids)}`;
   }
 });

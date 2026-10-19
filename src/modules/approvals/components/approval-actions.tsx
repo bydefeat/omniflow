@@ -1,11 +1,31 @@
 "use client";
 
-import { CheckOutlined, CloseOutlined } from "@ant-design/icons";
+import { CheckOutlined, CloseOutlined, RollbackOutlined } from "@ant-design/icons";
 import { Alert, App, Button, Card, Form, Input, Modal } from "antd";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { approveRequest, rejectRequest } from "../approvals.action";
+import { approveRequest, rejectRequest, returnRequest } from "../approvals.action";
+
+type Mode = "approve" | "reject" | "return";
+
+const MODE_TEXT: Record<Mode, { title: string; ok: string; label: string; required?: string; done: string }> = {
+  approve: { title: "Phê duyệt đơn", ok: "Xác nhận duyệt", label: "Ý kiến (không bắt buộc)", done: "Đã duyệt" },
+  reject: {
+    title: "Từ chối đơn",
+    ok: "Từ chối",
+    label: "Lý do từ chối",
+    required: "Vui lòng nhập lý do từ chối",
+    done: "Đã từ chối đơn",
+  },
+  return: {
+    title: "Yêu cầu bổ sung",
+    ok: "Gửi yêu cầu",
+    label: "Nội dung cần bổ sung",
+    required: "Vui lòng nêu nội dung cần bổ sung",
+    done: "Đã gửi yêu cầu bổ sung cho người đề xuất",
+  },
+};
 
 type Props = {
   approvalId: string;
@@ -17,7 +37,7 @@ export function ApprovalActions({ approvalId, stepName, onBehalfOfName }: Props)
   const router = useRouter();
   const { message } = App.useApp();
   const [form] = Form.useForm<{ comment?: string }>();
-  const [mode, setMode] = useState<"approve" | "reject" | null>(null);
+  const [mode, setMode] = useState<Mode | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function confirm() {
@@ -26,7 +46,9 @@ export function ApprovalActions({ approvalId, stepName, onBehalfOfName }: Props)
     const [result, error] =
       mode === "approve"
         ? await approveRequest({ approvalId, comment })
-        : await rejectRequest({ approvalId, comment: comment ?? "" });
+        : mode === "reject"
+          ? await rejectRequest({ approvalId, comment: comment ?? "" })
+          : await returnRequest({ approvalId, comment: comment ?? "" });
     setSaving(false);
     if (error) {
       message.error(error.message);
@@ -35,8 +57,8 @@ export function ApprovalActions({ approvalId, stepName, onBehalfOfName }: Props)
     }
     setMode(null);
     message.success(
-      mode === "reject"
-        ? "Đã từ chối đơn"
+      mode !== "approve"
+        ? MODE_TEXT[mode!].done
         : result && "completed" in result && result.completed
           ? "Đã duyệt. Đơn đã hoàn tất quy trình."
           : "Đã duyệt. Đơn được chuyển sang bước tiếp theo.",
@@ -45,7 +67,7 @@ export function ApprovalActions({ approvalId, stepName, onBehalfOfName }: Props)
     router.refresh();
   }
 
-  function open(next: "approve" | "reject") {
+  function open(next: Mode) {
     form.resetFields();
     setMode(next);
   }
@@ -58,7 +80,10 @@ export function ApprovalActions({ approvalId, stepName, onBehalfOfName }: Props)
             <div className="font-medium">Bạn đang xử lý: {stepName}</div>
             {onBehalfOfName && <div className="text-sm text-black/60">Duyệt thay {onBehalfOfName} (ủy quyền)</div>}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button size="large" icon={<RollbackOutlined />} className="flex-1 sm:flex-none" onClick={() => open("return")}>
+              Yêu cầu bổ sung
+            </Button>
             <Button danger size="large" icon={<CloseOutlined />} className="flex-1 sm:flex-none" onClick={() => open("reject")}>
               Từ chối
             </Button>
@@ -70,16 +95,24 @@ export function ApprovalActions({ approvalId, stepName, onBehalfOfName }: Props)
       </Card>
 
       <Modal
-        title={mode === "reject" ? "Từ chối đơn" : "Phê duyệt đơn"}
+        title={mode ? MODE_TEXT[mode].title : ""}
         open={mode !== null}
         onCancel={() => setMode(null)}
         onOk={confirm}
-        okText={mode === "reject" ? "Từ chối" : "Xác nhận duyệt"}
+        okText={mode ? MODE_TEXT[mode].ok : ""}
         okButtonProps={{ danger: mode === "reject" }}
         cancelText="Hủy"
         confirmLoading={saving}
         forceRender
       >
+        {mode === "return" && (
+          <Alert
+            type="info"
+            showIcon
+            className="!mb-4"
+            title="Đơn sẽ trả về người đề xuất để bổ sung. Khi họ gửi lại, đơn được duyệt lại từ bước đầu."
+          />
+        )}
         {mode === "reject" && (
           <Alert
             type="warning"
@@ -91,8 +124,8 @@ export function ApprovalActions({ approvalId, stepName, onBehalfOfName }: Props)
         <Form form={form} layout="vertical" requiredMark={false}>
           <Form.Item
             name="comment"
-            label={mode === "reject" ? "Lý do từ chối" : "Ý kiến (không bắt buộc)"}
-            rules={mode === "reject" ? [{ required: true, whitespace: true, message: "Vui lòng nhập lý do từ chối" }] : []}
+            label={mode ? MODE_TEXT[mode].label : ""}
+            rules={mode && MODE_TEXT[mode].required ? [{ required: true, whitespace: true, message: MODE_TEXT[mode].required }] : []}
           >
             <Input.TextArea rows={4} maxLength={500} showCount />
           </Form.Item>

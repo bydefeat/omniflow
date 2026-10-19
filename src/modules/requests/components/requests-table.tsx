@@ -1,13 +1,14 @@
 "use client";
 
-import { SearchOutlined } from "@ant-design/icons";
 import { Input, Select, Table } from "antd";
 import Link from "next/link";
-import { useMemo, useState } from "react";
 
+import { useListFilters } from "@/shared/hooks/list-filters.hook";
 import { formatDateTime, formatMoney } from "@/shared/libs/format.lib";
+import { PAGE_SIZE } from "@/shared/libs/list-params.lib";
 
 import { REQUEST_STATUS_META, type RequestStatus } from "../requests.constant";
+import type { RequestFilters } from "../requests.query";
 import { RequestStatusTag } from "./request-status-tag";
 
 export type RequestListRow = {
@@ -25,32 +26,28 @@ export type RequestListRow = {
 
 type Props = {
   rows: RequestListRow[];
+  total: number;
+  filters: RequestFilters;
+  types: { id: string; name: string }[];
   basePath: string;
   editDrafts?: boolean;
   showRequester?: boolean;
   statuses?: RequestStatus[];
 };
 
-export function RequestsTable({ rows, basePath, editDrafts = false, showRequester = false, statuses }: Props) {
+export function RequestsTable({
+  rows,
+  total,
+  filters,
+  types,
+  basePath,
+  editDrafts = false,
+  showRequester = false,
+  statuses,
+}: Props) {
   const hrefOf = (row: RequestListRow) =>
     editDrafts && row.status === "DRAFT" ? `${basePath}/${row.id}/edit` : `${basePath}/${row.id}`;
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<RequestStatus>();
-  const [typeName, setTypeName] = useState<string>();
-
-  const typeNames = useMemo(() => [...new Set(rows.map((r) => r.typeName))], [rows]);
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter(
-      (r) =>
-        (!q ||
-          r.title.toLowerCase().includes(q) ||
-          (r.code ?? "").toLowerCase().includes(q) ||
-          (r.requesterName ?? "").toLowerCase().includes(q)) &&
-        (!status || r.status === status) &&
-        (!typeName || r.typeName === typeName),
-    );
-  }, [rows, search, status, typeName]);
+  const { update, pending } = useListFilters(filters);
 
   const statusOptions = (statuses ?? (Object.keys(REQUEST_STATUS_META) as RequestStatus[])).map((s) => ({
     value: s,
@@ -60,31 +57,45 @@ export function RequestsTable({ rows, basePath, editDrafts = false, showRequeste
   return (
     <>
       <div className="mb-4 flex flex-wrap gap-2">
-        <Input
+        <Input.Search
           allowClear
-          prefix={<SearchOutlined />}
           placeholder={showRequester ? "Tìm theo mã, tiêu đề, người đề xuất" : "Tìm theo mã hoặc tiêu đề"}
           className="!w-full sm:!w-72"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          defaultValue={filters.q}
+          onSearch={(q) => update({ q })}
         />
-        <Select allowClear placeholder="Trạng thái" className="w-full sm:w-44" value={status} onChange={setStatus} options={statusOptions} />
+        <Select
+          allowClear
+          placeholder="Trạng thái"
+          className="w-full sm:w-44"
+          value={filters.status}
+          onChange={(status) => update({ status })}
+          options={statusOptions}
+        />
         <Select
           allowClear
           placeholder="Loại đơn"
           className="w-full sm:w-56"
-          value={typeName}
-          onChange={setTypeName}
-          options={typeNames.map((t) => ({ value: t, label: t }))}
+          value={filters.typeId}
+          onChange={(typeId) => update({ typeId })}
+          options={types.map((t) => ({ value: t.id, label: t.name }))}
         />
       </div>
 
       <Table
         rowKey="id"
         size="small"
-        dataSource={filtered}
+        dataSource={rows}
+        loading={pending}
         scroll={{ x: showRequester ? 1000 : 800 }}
-        pagination={{ pageSize: 20, hideOnSinglePage: true }}
+        pagination={{
+          current: filters.page,
+          pageSize: PAGE_SIZE,
+          total,
+          hideOnSinglePage: true,
+          showSizeChanger: false,
+          onChange: (page) => update({ page }),
+        }}
         columns={[
           {
             title: "Mã đơn",

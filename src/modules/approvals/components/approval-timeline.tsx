@@ -4,6 +4,7 @@ import {
   CheckCircleFilled,
   ClockCircleOutlined,
   CloseCircleFilled,
+  ExclamationCircleFilled,
   MinusCircleOutlined,
 } from "@ant-design/icons";
 import { Card, Tag, Timeline, theme } from "antd";
@@ -24,6 +25,7 @@ export function ApprovalTimeline({ timeline }: { timeline: TimelineData }) {
     WAITING: <ClockCircleOutlined style={{ color: token.colorPrimary }} />,
     APPROVED: <CheckCircleFilled style={{ color: token.colorSuccess }} />,
     REJECTED: <CloseCircleFilled style={{ color: token.colorError }} />,
+    RETURNED: <ExclamationCircleFilled style={{ color: token.colorWarning }} />,
     CANCELLED: <MinusCircleOutlined style={{ color: token.colorTextQuaternary }} />,
   };
 
@@ -61,7 +63,14 @@ export function ApprovalTimeline({ timeline }: { timeline: TimelineData }) {
           {round.comment && (
             <div
               className="mt-1 rounded-md px-3 py-2 text-sm"
-              style={{ background: round.result === "REJECTED" ? token.colorErrorBg : token.colorFillAlter }}
+              style={{
+                background:
+                  round.result === "REJECTED"
+                    ? token.colorErrorBg
+                    : round.result === "RETURNED"
+                      ? token.colorWarningBg
+                      : token.colorFillAlter,
+              }}
             >
               {round.comment}
             </div>

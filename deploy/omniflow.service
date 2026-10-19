@@ -1,0 +1,21 @@
+[Unit]
+Description=OmniFlow (Next.js)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=omniflow
+WorkingDirectory=/opt/omniflow
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm start -- --hostname 127.0.0.1 --port 3000
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/omniflow
+
+[Install]
+WantedBy=multi-user.target

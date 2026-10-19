@@ -8,6 +8,8 @@ import { type ShellUser, UserAvatarMenu } from "@/shared/components/ui/user-avat
 import { ADMINISTRATOR_NAV } from "@/shared/constants/navigation.constant";
 import { findActiveItem } from "@/shared/libs/navigation.lib";
 
+import { AdministratorMobileMenu } from "./sidebar";
+
 export function AdministratorHeader({ user }: { user: ShellUser }) {
   const pathname = usePathname();
   const { token } = theme.useToken();
@@ -22,22 +24,25 @@ export function AdministratorHeader({ user }: { user: ShellUser }) {
 
   return (
     <Layout.Header
-      className="!sticky top-0 z-20 flex items-center justify-between gap-3 !px-6"
+      className="!sticky top-0 z-20 flex items-center justify-between gap-3 !px-4 md:!px-6"
       style={{
         background: token.colorBgContainer,
         borderBottom: `1px solid ${token.colorBorderSecondary}`,
       }}
     >
-      <Breadcrumb
-        className="ps-8 lg:ps-0"
-        items={[
-          { title: <Link href="/administrator">Quản trị</Link> },
-          ...(group?.label ? [{ title: group.label }] : []),
-          ...(active && active.href !== "/administrator"
-            ? [{ title: <Link href={active.href}>{active.label}</Link> }]
-            : []),
-        ]}
-      />
+      <div className="flex min-w-0 items-center gap-2">
+        <AdministratorMobileMenu />
+        <Breadcrumb
+          className="min-w-0 truncate"
+          items={[
+            { title: <Link href="/administrator">Quản trị</Link> },
+            ...(group?.label ? [{ title: group.label }] : []),
+            ...(active && active.href !== "/administrator"
+              ? [{ title: <Link href={active.href}>{active.label}</Link> }]
+              : []),
+          ]}
+        />
+      </div>
       <UserAvatarMenu user={user} portal="administrator" />
     </Layout.Header>
   );

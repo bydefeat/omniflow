@@ -5,8 +5,9 @@ Kế hoạch chi tiết theo lộ trình ở `ARCHITECTURE.md` mục 7. Mỗi gi
 ## 0. Hiện trạng (2026-10-19): đã xong cả 10 giai đoạn
 
 - [x] Next.js 16.4.2, React 19.3, TypeScript, Tailwind 4; `next.config.ts` bật `cacheComponents`, `partialPrefetching`, `authInterrupts`, giới hạn body server action / proxy 11 MB.
-- [x] Đã cài: antd 6, @ant-design/icons, @ant-design/nextjs-registry, motion, drizzle-orm + drizzle-kit + drizzle-zod, postgres (driver), better-auth, zod 4, zsa + zsa-react-query, zustand, @tanstack/react-query, @tanstack/react-table v9, @dnd-kit (core, sortable, utilities), uuidv7, tsx.
-- [x] `.npmrc` có `legacy-peer-deps=true` (giống hcmue-portal) vì zsa 0.6 khai báo peer `zod@^3`. Với input JSON thì zsa chạy đúng với zod 4. **Input `type: "formData"` của zsa hỏng với zod 4** (`a.unwrap is not a function`), nên upload tệp dùng server action thường (xem giai đoạn 6).
+- [x] Đã cài: antd 6, @ant-design/icons, @ant-design/nextjs-registry, motion, drizzle-orm + drizzle-kit + drizzle-zod, postgres (driver), better-auth, zod 4, zustand, @tanstack/react-query, @tanstack/react-table v9, @dnd-kit (core, sortable, utilities), uuidv7, tsx.
+- [x] Đã bỏ zsa (viết cho zod 3, input `formData` hỏng với zod 4): server action dùng lớp bọc riêng ở `action.lib.ts` (cùng API `authedProcedure` / `roleProcedure`, trả `[data, error]`, nhận cả FormData). Không còn cần `.npmrc` `legacy-peer-deps`.
+- [x] Hướng dẫn triển khai không dùng Docker ở `docs/DEPLOY.md` (systemd, nginx, sao lưu, file mẫu trong `deploy/`).
 - [x] Toàn bộ 10 giai đoạn đã làm và kiểm thử, kết quả ở mục 4.
 
 ### Chạy dự án
@@ -20,6 +21,8 @@ npm run db:seed -- --demo       # thêm 5 tài khoản demo (mật khẩu Omnifl
 npm run dev
 npm test                        # unit test quy trình duyệt
 npm run build && npm run test:e2e   # e2e Playwright trên production build, cần DB vừa seed --demo
+npm run mail:flush              # gửi email còn tồn trong hàng đợi (chạy định kỳ bằng systemd timer)
+scripts/backup.sh               # sao lưu database + uploads/
 ```
 
 Tài khoản demo: `ceo@`, `cfo@`, `truongphong.it@`, `ketoan@`, `nhanvien.it@` (đuôi `omniflow.local`). Quan hệ quản lý: nhân viên IT → trưởng phòng IT → CEO; kế toán → CFO → CEO.
@@ -32,7 +35,7 @@ Các chỗ thiếu trong `docs.md` (xem `ARCHITECTURE.md` mục 6) tạm chốt 
 |---|---|
 | G1 | Người dùng có `managerId` (tự tham chiếu) để giải bước `MANAGER` |
 | G2 | Bước `ROLE` giao cho **vai trò chức năng** (`accountant`, `hr`, `cfo`, `ceo`...), khai báo trong `role.constant.ts`. Mọi người giữ vai trò đó cùng thấy lượt, ai duyệt trước thì nhận |
-| G3 | Trạng thái đơn: `DRAFT`, `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`. **Không** làm "yêu cầu bổ sung" ở bản 1.0 |
+| G3 | Trạng thái đơn: `DRAFT`, `PENDING`, `NEEDS_INFO`, `APPROVED`, `REJECTED`, `CANCELLED`. "Yêu cầu bổ sung": người duyệt trả đơn kèm nội dung cần bổ sung (lượt `RETURNED`), người làm đơn sửa rồi gửi lại, đơn được duyệt lại từ bước đầu (nội dung có thể đã đổi nên các bước trước phải xác nhận lại) |
 | G4 | Hủy được khi `DRAFT` hoặc `PENDING` (kể cả đã có cấp duyệt) |
 | G5 | Ủy quyền có người ủy quyền và người được ủy quyền; xét lúc đọc/duyệt. Một người không có hai ủy quyền `ACTIVE` chồng thời gian |
 | G6 | Khóa tài khoản (`LOCKED`) dùng `banned` của plugin `admin` better-auth, không thêm cột `status` riêng |
@@ -322,7 +325,7 @@ Kiểm thử đầu-cuối tìm ra và đã sửa 3 lỗi: zsa `type: "formData"
 
 ### 4.1. E2E trong repo (`scripts/e2e/`, Playwright)
 
-Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` → `npm run test:e2e` (tự `npm start` nếu cổng 3000 trống). Trình duyệt có sẵn thì truyền `E2E_CHROMIUM_PATH`. Đặt `DEFEAT_SMTP_CONNECTION_URL=smtp://127.0.0.1:2525` (cho cả server và lệnh test) thì e2e tự bật SMTP sink và chạy thêm test email; đặt các biến `DEFEAT_S3_*` thì chạy trên S3 (CI dùng moto). Kết quả: 29 qua + 1 bỏ qua khi có SMTP và S3; 28 qua + 2 bỏ qua ở cấu hình mặc định. CI (`.github/workflows/ci.yml`) chạy lint, tsc, unit test và e2e với Postgres, moto và SMTP sink cho mỗi PR.
+Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` → `npm run test:e2e` (tự `npm start` nếu cổng 3000 trống). Trình duyệt có sẵn thì truyền `E2E_CHROMIUM_PATH`. Đặt `DEFEAT_SMTP_CONNECTION_URL=smtp://127.0.0.1:2525` (cho cả server và lệnh test) thì e2e tự bật SMTP sink và chạy thêm test email; đặt các biến `DEFEAT_S3_*` thì chạy trên S3 (CI dùng moto). Kết quả: 38 qua + 1 bỏ qua khi có SMTP và S3; 36 qua + 3 bỏ qua ở cấu hình mặc định. CI (`.github/workflows/ci.yml`) chạy lint, tsc, unit test và e2e với Postgres, moto và SMTP sink cho mỗi PR.
 
 | File | Nội dung |
 |---|---|
@@ -332,8 +335,9 @@ Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` �
 | `reassign.spec.ts` | Khóa người giữ vai trò duy nhất → tổng quan admin báo lượt treo → giao lại qua UI → người mới nhận thông báo và duyệt được; hủy đơn báo cho người giữ vai trò và người được họ ủy quyền |
 | `mobile.spec.ts` | 8 trang workspace ở 390×844: không tràn ngang, thanh tab đáy hiển thị; "Đơn chờ tôi duyệt" hiện dạng thẻ dưới 768px |
 | `drag-drop.spec.ts` | Kéo thả bằng chuột đổi thứ tự trường biểu mẫu và bước duyệt, lưu đúng thứ tự vào DB |
-| `mail.spec.ts` | Quên mật khẩu → email thật tới SMTP sink → mở liên kết → đặt mật khẩu mới → đăng nhập được; người duyệt nhận email khi có đơn chờ |
-| `followups.spec.ts` | Người chỉ được ủy quyền vào trang ủy quyền; người ủy quyền thấy lượt được duyệt thay trong lịch sử; nháp cũ lưu được sau khi biểu mẫu đổi; tệp giả PDF bị từ chối; lỗi rõ cho id không tồn tại, phòng ban sai, quản lý bị khóa |
+| `mail.spec.ts` | Quên mật khẩu → email thật tới SMTP sink → mở liên kết → đặt mật khẩu mới → đăng nhập được; người duyệt nhận email khi có đơn chờ; `mail:flush` gửi email tồn, SMTP lỗi thì hẹn gửi lại |
+| `return.spec.ts` | Người duyệt yêu cầu bổ sung (bắt buộc nội dung) → người làm đơn thấy thông báo, bổ sung tệp, sửa lý do, gửi lại → đơn duyệt lại từ bước đầu; hủy khi chờ bổ sung báo cho người đã yêu cầu; hủy khi đang chờ bổ sung; gửi lại hai lần bị chặn |
+| `followups.spec.ts` | Lọc và phân trang ở server theo URL; người chỉ được ủy quyền vào trang ủy quyền; người ủy quyền thấy lượt được duyệt thay trong lịch sử; nháp cũ lưu được sau khi biểu mẫu đổi; tệp giả PDF bị từ chối; lỗi rõ cho id không tồn tại, phòng ban sai, quản lý bị khóa |
 
 **Chưa kiểm:** portal admin trên điện thoại (thiết kế cho máy tính); gửi email qua dịch vụ SMTP thật và S3 thật (đã kiểm với SMTP sink và moto).
 
@@ -341,12 +345,11 @@ Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` �
 
 | Rủi ro | Cách xử lý |
 |---|---|
-| zsa 0.6 viết cho zod 3 | Input JSON chạy được; input `formData` hỏng nên đã tránh. Action có schema `.refine()` lồng trong mảng thì zsa không suy được kiểu `input` → ép kiểu bằng `z.infer` (xem `request-types.action.ts`, `delegations.action.ts`). Muốn bỏ zsa thì chỉ sửa `action.lib.ts` và các `*.action.ts` |
+| Server action tự viết (`action.lib.ts`) | Lỗi không lường trước được ghi log và trả `INTERNAL_SERVER_ERROR`, không lộ chi tiết ra client; lỗi điều hướng của Next (`redirect`, `notFound`) được ném lại nguyên vẹn |
 | Server component dùng component antd | Chỉ dùng export có tên (`Button`, `Tag`); **không** dùng `X.Y` (`Layout.Content`, `Descriptions.Item`...) và không dùng icon trong server component — đặt chúng trong component `"use client"` |
-| `cacheComponents` | Không dùng `new Date()` / `Math.random()` khi render ở phần tĩnh; `next dev` có cảnh báo "uncached data" ở layout portal (đọc session ngoài `<Suspense>` của segment) — không chặn build, xử lý sau nếu cần điều hướng tức thì |
+| `cacheComponents` | Không dùng `new Date()` / `Math.random()` khi render ở phần tĩnh. Layout portal đọc session bên trong `<Suspense>` và mỗi trang có `loading.tsx`, nên `next dev` không còn cảnh báo "uncached data"; trang mới cũng cần `loading.tsx` |
 | Rate limit đăng nhập của better-auth (production) | Lưu trong bảng `rate_limit` nên có hiệu lực chung khi chạy nhiều instance; script tự động cần đợi rồi thử lại. Chạy sau nhiều tầng proxy thì cấu hình `advanced.ipAddress` trong `auth.lib.ts` theo hạ tầng, nếu không mọi người dùng có thể dùng chung một hạn mức |
-| Danh sách người dùng / đơn lọc phía client | Đủ cho vài nghìn dòng; lớn hơn thì chuyển sang phân trang và lọc ở server (query nhận tham số từ `searchParams`) |
-| Đếm "chờ tôi duyệt" chạy lại cả truy vấn danh sách | Đủ ở quy mô nội bộ; chậm thì viết truy vấn `count` riêng |
+| Danh sách lớn | Người dùng và đơn lọc, phân trang ở server theo `searchParams` (20 dòng/trang). Danh sách "chờ tôi duyệt" và lịch sử duyệt vẫn tải hết; cần thì phân trang tương tự |
 | Lưu tệp | Mặc định ổ đĩa local (`uploads/`), không dùng được khi chạy nhiều instance; đặt `DEFEAT_S3_*` để dùng S3/R2/MinIO (`storage.lib.ts`) |
-| Email (G7) | Gửi không chờ (không lộ email nào có tài khoản, không làm chậm thao tác duyệt); lỗi gửi chỉ ghi log, không có hàng đợi gửi lại |
+| Email (G7) | Hàng đợi `email_outbox` ghi trong cùng transaction với thông báo; gửi sau khi phản hồi xong, lỗi thì thử lại tối đa 8 lần giãn dần; `npm run mail:flush` (systemd timer 5 phút) gửi nốt phần còn tồn |
 | Giả định G1–G9 | Vẫn cần chốt với người viết `docs.md`; schema đang theo các giả định này |

@@ -7,7 +7,7 @@ import { useState } from "react";
 
 import { cancelRequest } from "../approvals.action";
 
-export function CancelRequestButton({ requestId }: { requestId: string }) {
+export function CancelRequestButton({ requestId, redirectTo }: { requestId: string; redirectTo?: string }) {
   const router = useRouter();
   const { message } = App.useApp();
   const [loading, setLoading] = useState(false);
@@ -18,7 +18,8 @@ export function CancelRequestButton({ requestId }: { requestId: string }) {
     setLoading(false);
     if (error) return message.error(error.message);
     message.success("Đã hủy đơn");
-    router.refresh();
+    if (redirectTo) router.replace(redirectTo);
+    else router.refresh();
   }
 
   return (

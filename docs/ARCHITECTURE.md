@@ -48,13 +48,13 @@ src/
 │   │       ├── requests/            # /workspace/requests        đơn của tôi                UC-03
 │   │       │   ├── new/             # chọn loại đơn → form động                         UC-02
 │   │       │   └── [requestId]/     # chi tiết + dòng thời gian duyệt, nút hủy          UC-03, UC-04
-│   │       │       └── edit/        # chỉ khi đơn đang DRAFT
+│   │       │       └── edit/        # khi đơn đang DRAFT, hoặc NEEDS_INFO (bổ sung & gửi lại)
 │   │       ├── approvals/           # mục PHÊ DUYỆT
-│   │       │   ├── layout.tsx       # canAccessApprovals(): role "approver" HOẶC đang được ủy quyền
+│   │       │   ├── layout.tsx       # canAccessApprovals(): có vai trò duyệt, đang được ủy quyền hoặc từng xử lý lượt
 │   │       │   ├── page.tsx         # /workspace/approvals       đơn chờ tôi duyệt         UC-05
-│   │       │   ├── [requestId]/     # xem đơn, phê duyệt / từ chối                       UC-06, UC-07
-│   │       │   ├── history/         # các lượt tôi đã xử lý
-│   │       │   └── delegations/     # ủy quyền của tôi, requireRole("approver")          UC-08
+│   │       │   ├── [requestId]/     # xem đơn, phê duyệt / từ chối / yêu cầu bổ sung     UC-06, UC-07
+│   │       │   └── history/         # các lượt tôi đã xử lý hoặc được duyệt thay
+│   │       ├── delegations/         # ủy quyền đã tạo và được nhận                      UC-08
 │   │       ├── notifications/       # UC-01
 │   │       └── profile/
 │   │
@@ -81,7 +81,7 @@ src/
 │   ├── users/                       #   requests.schema.ts      bảng Drizzle
 │   ├── request-types/               #   requests.validation.ts  zod schema, dùng chung form client + action
 │   ├── requests/                    #   requests.query.ts       hàm đọc dữ liệu (server)
-│   ├── approvals/                   #   requests.action.ts      server action (ZSA)
+│   ├── approvals/                   #   requests.action.ts      server action (action.lib.ts)
 │   ├── delegations/                 #   requests.constant.ts    nhãn + màu trạng thái
 │   └── notifications/               #   components/             UI riêng của module
 │
@@ -105,12 +105,16 @@ src/
     │   ├── auth-client.lib.ts       # createAuthClient() (client)
     │   ├── session.lib.ts           # getSession(), requireSession(), requireRole() → forbidden()
     │   ├── role.lib.ts              # parseRoles(), hasRole(), getHomePath(), safeCallbackPath()
-    │   ├── action.lib.ts            # ZSA procedure: authedProcedure, roleProcedure(role)
+    │   ├── action.lib.ts            # authedProcedure, roleProcedure(role), ActionError
+    │   ├── mail.lib.ts              # hàng đợi email_outbox: queueMail(), flushMailOutbox()
+    │   ├── list-params.lib.ts       # đọc q / page từ searchParams, PAGE_SIZE
     │   ├── query-client.lib.ts      # tạo QueryClient (TanStack Query)
-    │   ├── storage.lib.ts           # lưu / đọc file đính kèm trong uploads/
+    │   ├── storage.lib.ts           # lưu / đọc file đính kèm: uploads/ hoặc S3/R2
     │   ├── db-error.lib.ts          # pgErrorCode() + mã lỗi Postgres (unique, FK, exclusion)
     │   ├── format.lib.ts            # formatMoney(), formatDate(), formatDateTime()
     │   └── navigation.lib.ts        # findActiveItem(): mục menu đang chọn
+    ├── hooks/
+    │   └── list-filters.hook.ts     # cập nhật bộ lọc danh sách lên URL
     └── stores/                      # zustand CHỈ cho state UI
         └── sidebar.store.ts         # export useSidebarStore
 ```
@@ -156,7 +160,7 @@ CDM không có khóa ngoại (đúng chuẩn Merise). Khóa ngoại được th�
 
 ### Hướng import
 
-**Giữa các lớp (một chiều):** `app` → `modules` → `shared`. `shared` không import `modules` hay `app`. Ngoại lệ duy nhất: `db.lib.ts` và `auth.lib.ts` là điểm nối, được import `modules/schema.ts` (chỉ bảng, không nghiệp vụ).
+**Giữa các lớp (một chiều):** `app` → `modules` → `shared`. `shared` không import `modules` hay `app`. Ngoại lệ: `db.lib.ts`, `auth.lib.ts` và `mail.lib.ts` (hàng đợi `email_outbox`) là điểm nối, được import `modules/schema.ts` (chỉ bảng, không nghiệp vụ).
 
 **Giữa các module:** khác hcmue-portal (module không import module), OmniFlow cho phép import có giới hạn, vì quy trình duyệt phải ghi nhiều bảng trong **một transaction** (gửi đơn = đổi trạng thái đơn + tạo lượt duyệt cấp 1 + tạo thông báo). Ghép ở `app` thì không giữ được transaction.
 
@@ -182,18 +186,23 @@ departments ← users ← request-types ← requests ← approvals
 
 ```
 DRAFT ──submit──▶ PENDING ──duyệt bước cuối──▶ APPROVED
-  │                  ├──────từ chối──────────▶ REJECTED
-  └──────hủy─────────┴───────hủy─────────────▶ CANCELLED
+  │               │  ▲  ├──────từ chối────────▶ REJECTED
+  │   yêu cầu bổ sung│  │gửi lại
+  │               ▼  │
+  │             NEEDS_INFO
+  └──xóa nháp       └──────────hủy (PENDING hoặc NEEDS_INFO)──▶ CANCELLED
 ```
 
-**Trạng thái lượt duyệt (`approvals.result`):** `WAITING` → `APPROVED` | `REJECTED`; lượt đang `WAITING` chuyển `CANCELLED` khi người làm đơn hủy.
+**Trạng thái lượt duyệt (`approvals.result`):** `WAITING` → `APPROVED` | `REJECTED` | `RETURNED` (yêu cầu bổ sung, bắt buộc nội dung); lượt đang `WAITING` chuyển `CANCELLED` khi người làm đơn hủy. Mỗi đơn có tối đa một lượt `WAITING` (unique index một phần); một bước có thể có nhiều lượt khi đơn được trả về rồi gửi lại.
 
 | Action | Việc làm trong một transaction |
 |---|---|
 | `submitRequest` | Kiểm tra đơn là DRAFT của chính người gọi → khóa chia sẻ dòng loại đơn, chụp `formSchema`/`hasLineItems`/`slaHours`/bước duyệt vào `requests.snapshot` → `PENDING` → tạo lượt cho bước 1 → thông báo người duyệt |
 | `approveRequest` | Khóa đơn rồi khóa lượt (`SELECT ... FOR UPDATE`), kiểm tra `WAITING` và đúng người duyệt → `APPROVED`. Bước kế tiếp lấy từ `snapshot`, không đọc cấu hình hiện tại. Hết bước: đơn `APPROVED`, thông báo người làm đơn |
 | `rejectRequest` | Như trên, bắt buộc `YKienPhanHoi` (zod) → lượt `REJECTED`, đơn `REJECTED`, dừng quy trình, thông báo kèm lý do |
-| `cancelRequest` | Chỉ người làm đơn, đơn đang PENDING → `CANCELLED`, các lượt `WAITING` → `CANCELLED`, báo người duyệt (kể cả người giữ vai trò và người được ủy quyền) |
+| `returnRequest` | Như `rejectRequest` nhưng lượt `RETURNED`, đơn `NEEDS_INFO`, báo người làm đơn kèm nội dung cần bổ sung |
+| `resubmitRequest` | Chỉ người làm đơn, đơn `NEEDS_INFO`: kiểm tra biểu mẫu theo `snapshot` → `PENDING` → mở lượt mới từ bước đầu (nội dung có thể đã đổi nên các bước trước duyệt lại) |
+| `cancelRequest` | Chỉ người làm đơn, đơn đang PENDING hoặc NEEDS_INFO → `CANCELLED`, các lượt `WAITING` → `CANCELLED`, báo người duyệt (kể cả người giữ vai trò và người được ủy quyền) |
 | `reassignApproval` | Chỉ admin. Giao lượt `WAITING` cho một người cụ thể khi người duyệt bị khóa hoặc không còn ai giữ vai trò; ghi `reassignedById`, `reassignedAt` |
 
 **Thứ tự khóa:** mọi action ghi đơn khóa dòng `requests` trước, rồi mới tới `approvals`, để không deadlock. Sửa / xóa nháp và thêm / xóa tệp khóa dòng đơn đang `DRAFT` trong transaction, nên không chạm được đơn vừa gửi.
@@ -266,7 +275,7 @@ Mỗi folder chỉ export `index.tsx`. Menu lấy từ `shared/constants/navigat
 | Vai trò | Plugin `admin` của better-auth, một user nhiều role (`employee`, `approver`, `admin`). Mọi tài khoản đều có `employee` | Đúng quan hệ kế thừa ở docs.md 2.1. Admin cũng tạo đơn được |
 | Quyền mục Phê duyệt | `canAccessApprovals()` đặt ở `approvals.query.ts`, không ở `shared` | Phụ thuộc dữ liệu ủy quyền, là nghiệp vụ |
 | Sau đăng nhập | `admin` → `/administrator`, còn lại → `/workspace/dashboard` (khai báo ở `role.constant.ts`) | |
-| Server action | ZSA: `createServerActionProcedure` cho session/role, `.input(zodSchema)` cho dữ liệu. Ngoại lệ: `uploadAttachment` là server action thường (tự kiểm phiên + zod, vẫn trả `[data, error]`) vì zsa `type: "formData"` hỏng với zod 4 | Validate và kiểm quyền một chỗ, lỗi trả về có kiểu |
+| Server action | Lớp bọc riêng ở `action.lib.ts`: `authedProcedure` / `roleProcedure(role)` cho session và vai trò, `.input(zodSchema)` (hoặc `{ type: "formData" }`) cho dữ liệu, trả `[data, error]`; lỗi nghiệp vụ ném `ActionError(code, message)` | Validate và kiểm quyền một chỗ, lỗi trả về có kiểu, không phụ thuộc thư viện viết cho zod 3 |
 | Dữ liệu server | Mặc định: server component gọi `*.query.ts`. **TanStack Query chỉ dùng** cho dữ liệu client cần tự làm mới (chuông thông báo, số đơn chờ duyệt), `queryFn` gọi thẳng action zsa | Không đồng bộ một dữ liệu ở hai nơi khi không cần |
 | Múi giờ | Mọi ngày giờ hiển thị qua `format.lib.ts`, cố định `Asia/Ho_Chi_Minh` bằng `Intl.DateTimeFormat` | Server (thường chạy UTC) và trình duyệt ra cùng một chuỗi: đúng giờ Việt Nam và không lỗi hydration |
 | Component antd trong server component | Chỉ dùng export có tên (`Button`, `Tag`); không dùng `X.Y` (`Layout.Content`...) hay icon — đặt trong component `"use client"` | Từ server, client component chỉ là tham chiếu theo tên export; thuộc tính tĩnh thành `undefined` |
@@ -290,7 +299,7 @@ Khi ánh xạ CDM sang code, các chỗ sau trong `docs.md` chưa đủ để c�
 | Không có quan hệ "quản lý trực tiếp" giữa NGUOI_DUNG | Bước `KieuNguoiDuyet = MANAGER` không biết ai duyệt | Thêm `managerId` (tự tham chiếu) vào người dùng |
 | BUOC_DUYET kiểu `ROLE` không nói vai trò nào, phạm vi nào | Không xác định được người duyệt | Thêm `approverRole` (VD: `ACCOUNTANT`, `CFO`) và `approverUserId` (tùy chọn); cần chốt có lọc theo phòng ban không |
 | `DON_YEU_CAU.TrangThai` thiếu `DRAFT` dù UC-02 có "Lưu nháp" | | Thêm `DRAFT` |
-| Bảng tác nhân có "yêu cầu bổ sung" nhưng không có UC hay trạng thái tương ứng | | Bỏ ở bản 1.0, hoặc thêm trạng thái `NEEDS_INFO` và UC riêng |
+| Bảng tác nhân có "yêu cầu bổ sung" nhưng không có UC hay trạng thái tương ứng | | **Đã làm:** trạng thái `NEEDS_INFO`, lượt `RETURNED`, bổ sung & gửi lại thì duyệt lại từ bước đầu |
 | UC-04 chỉ cho hủy khi "Chờ duyệt" | Đơn nháp không xóa được | Cho hủy cả DRAFT; hoặc chỉ cho hủy PENDING khi chưa có ai duyệt |
 | UY_QUYEN chỉ có một mối kết hợp với NGUOI_DUNG | Không biết ủy quyền cho ai | Hai quan hệ: người ủy quyền và người được ủy quyền |
 | LUOT_PHE_DUYET chưa gắn với người duyệt gốc khi duyệt thay | Audit không biết lượt này duyệt thay ai | Thêm `onBehalfOfId` |

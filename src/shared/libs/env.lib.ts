@@ -1,5 +1,16 @@
 import { z } from "zod";
 
+const commaList = z
+  .string()
+  .optional()
+  .transform((value) =>
+    value
+      ?.split(",")
+      .map((v) => v.trim())
+      .filter(Boolean),
+  )
+  .transform((list) => (list?.length ? list : undefined));
+
 const schema = z.object({
   DEFEAT_POSTGRES_PRIMARY_DATABASE_CONNECTION_URL: z.url(),
   DEFEAT_BETTER_AUTH_SESSION_SIGNING_SECRET_KEY: z.string().min(32),
@@ -11,6 +22,8 @@ const schema = z.object({
   DEFEAT_S3_ENDPOINT_URL: z.url().optional().or(z.literal("").transform(() => undefined)),
   DEFEAT_S3_ACCESS_KEY_ID: z.string().optional(),
   DEFEAT_S3_SECRET_ACCESS_KEY: z.string().optional(),
+  DEFEAT_CLIENT_IP_HEADERS: commaList,
+  DEFEAT_TRUSTED_PROXIES: commaList,
 });
 
 export const env = schema
