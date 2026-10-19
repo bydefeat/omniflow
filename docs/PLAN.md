@@ -35,7 +35,7 @@ Các chỗ thiếu trong `docs.md` (xem `ARCHITECTURE.md` mục 6) tạm chốt 
 |---|---|
 | G1 | Người dùng có `managerId` (tự tham chiếu) để giải bước `MANAGER` |
 | G2 | Bước `ROLE` giao cho **vai trò chức năng** (`accountant`, `hr`, `cfo`, `ceo`...), khai báo trong `role.constant.ts`. Mọi người giữ vai trò đó cùng thấy lượt, ai duyệt trước thì nhận |
-| G3 | Trạng thái đơn: `DRAFT`, `PENDING`, `NEEDS_INFO`, `APPROVED`, `REJECTED`, `CANCELLED`. "Yêu cầu bổ sung": người duyệt trả đơn kèm nội dung cần bổ sung (lượt `RETURNED`), người làm đơn sửa rồi gửi lại, đơn quay về đúng bước đã yêu cầu bổ sung |
+| G3 | Trạng thái đơn: `DRAFT`, `PENDING`, `NEEDS_INFO`, `APPROVED`, `REJECTED`, `CANCELLED`. "Yêu cầu bổ sung": người duyệt trả đơn kèm nội dung cần bổ sung (lượt `RETURNED`), người làm đơn sửa rồi gửi lại, đơn được duyệt lại từ bước đầu (nội dung có thể đã đổi nên các bước trước phải xác nhận lại) |
 | G4 | Hủy được khi `DRAFT` hoặc `PENDING` (kể cả đã có cấp duyệt) |
 | G5 | Ủy quyền có người ủy quyền và người được ủy quyền; xét lúc đọc/duyệt. Một người không có hai ủy quyền `ACTIVE` chồng thời gian |
 | G6 | Khóa tài khoản (`LOCKED`) dùng `banned` của plugin `admin` better-auth, không thêm cột `status` riêng |
@@ -325,7 +325,7 @@ Kiểm thử đầu-cuối tìm ra và đã sửa 3 lỗi: zsa `type: "formData"
 
 ### 4.1. E2E trong repo (`scripts/e2e/`, Playwright)
 
-Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` → `npm run test:e2e` (tự `npm start` nếu cổng 3000 trống). Trình duyệt có sẵn thì truyền `E2E_CHROMIUM_PATH`. Đặt `DEFEAT_SMTP_CONNECTION_URL=smtp://127.0.0.1:2525` (cho cả server và lệnh test) thì e2e tự bật SMTP sink và chạy thêm test email; đặt các biến `DEFEAT_S3_*` thì chạy trên S3 (CI dùng moto). Kết quả: 29 qua + 1 bỏ qua khi có SMTP và S3; 28 qua + 2 bỏ qua ở cấu hình mặc định. CI (`.github/workflows/ci.yml`) chạy lint, tsc, unit test và e2e với Postgres, moto và SMTP sink cho mỗi PR.
+Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` → `npm run test:e2e` (tự `npm start` nếu cổng 3000 trống). Trình duyệt có sẵn thì truyền `E2E_CHROMIUM_PATH`. Đặt `DEFEAT_SMTP_CONNECTION_URL=smtp://127.0.0.1:2525` (cho cả server và lệnh test) thì e2e tự bật SMTP sink và chạy thêm test email; đặt các biến `DEFEAT_S3_*` thì chạy trên S3 (CI dùng moto). Kết quả: 38 qua + 1 bỏ qua khi có SMTP và S3; 36 qua + 3 bỏ qua ở cấu hình mặc định. CI (`.github/workflows/ci.yml`) chạy lint, tsc, unit test và e2e với Postgres, moto và SMTP sink cho mỗi PR.
 
 | File | Nội dung |
 |---|---|
@@ -336,7 +336,7 @@ Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` �
 | `mobile.spec.ts` | 8 trang workspace ở 390×844: không tràn ngang, thanh tab đáy hiển thị; "Đơn chờ tôi duyệt" hiện dạng thẻ dưới 768px |
 | `drag-drop.spec.ts` | Kéo thả bằng chuột đổi thứ tự trường biểu mẫu và bước duyệt, lưu đúng thứ tự vào DB |
 | `mail.spec.ts` | Quên mật khẩu → email thật tới SMTP sink → mở liên kết → đặt mật khẩu mới → đăng nhập được; người duyệt nhận email khi có đơn chờ; `mail:flush` gửi email tồn, SMTP lỗi thì hẹn gửi lại |
-| `return.spec.ts` | Người duyệt yêu cầu bổ sung (bắt buộc nội dung) → người làm đơn thấy thông báo, bổ sung tệp, sửa lý do, gửi lại → đơn quay về đúng bước; hủy khi đang chờ bổ sung; gửi lại hai lần bị chặn |
+| `return.spec.ts` | Người duyệt yêu cầu bổ sung (bắt buộc nội dung) → người làm đơn thấy thông báo, bổ sung tệp, sửa lý do, gửi lại → đơn duyệt lại từ bước đầu; hủy khi chờ bổ sung báo cho người đã yêu cầu; hủy khi đang chờ bổ sung; gửi lại hai lần bị chặn |
 | `followups.spec.ts` | Lọc và phân trang ở server theo URL; người chỉ được ủy quyền vào trang ủy quyền; người ủy quyền thấy lượt được duyệt thay trong lịch sử; nháp cũ lưu được sau khi biểu mẫu đổi; tệp giả PDF bị từ chối; lỗi rõ cho id không tồn tại, phòng ban sai, quản lý bị khóa |
 
 **Chưa kiểm:** portal admin trên điện thoại (thiết kế cho máy tính); gửi email qua dịch vụ SMTP thật và S3 thật (đã kiểm với SMTP sink và moto).

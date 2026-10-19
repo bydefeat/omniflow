@@ -429,13 +429,7 @@ export const resubmitRequest = authedProcedure
         if (total === 0) throw new ActionError("UNPROCESSABLE_CONTENT", "Cần ít nhất một hạng mục chi tiết");
       }
 
-      const [returned] = await tx
-        .select({ stepOrder: approvals.stepOrder })
-        .from(approvals)
-        .where(and(eq(approvals.requestId, request.id), eq(approvals.result, "RETURNED")))
-        .orderBy(desc(approvals.decidedAt))
-        .limit(1);
-      const step = flow.steps.find((s) => s.stepOrder === returned?.stepOrder) ?? flow.steps[0];
+      const step = flow.steps[0];
       const requester = await loadRequester(tx, ctx.user.id);
       const { assignee, recipients } = await assign(tx, step, requester);
 
@@ -479,6 +473,15 @@ export const cancelRequest = authedProcedure
           waiting.map((w) => (w.approverId ? [w.approverId] : findRoleHolders(tx, w.approverRole!, request.requesterId))),
         )
       ).flat();
+      if (request.status === "NEEDS_INFO") {
+        const [returned] = await tx
+          .select({ actedById: approvals.actedById })
+          .from(approvals)
+          .where(and(eq(approvals.requestId, request.id), eq(approvals.result, "RETURNED")))
+          .orderBy(desc(approvals.decidedAt))
+          .limit(1);
+        if (returned?.actedById) assignees.push(returned.actedById);
+      }
       await notify(
         tx,
         outbox,

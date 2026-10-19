@@ -30,14 +30,16 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       if (isMailConfigured) {
-        await queueMail(db, [
-          {
-            to: user.email,
-            subject: "Đặt lại mật khẩu OmniFlow",
-            text: `Chào ${user.name},\n\nMở liên kết sau để đặt lại mật khẩu (hết hạn sau 1 giờ):\n${url}\n\nNếu bạn không yêu cầu, hãy bỏ qua email này.`,
-          },
-        ]);
-        after(() => flushMailOutbox().catch((error) => console.error("[mail] flush thất bại", error)));
+        after(async () => {
+          await queueMail(db, [
+            {
+              to: user.email,
+              subject: "Đặt lại mật khẩu OmniFlow",
+              text: `Chào ${user.name},\n\nMở liên kết sau để đặt lại mật khẩu (hết hạn sau 1 giờ):\n${url}\n\nNếu bạn không yêu cầu, hãy bỏ qua email này.`,
+            },
+          ]);
+          await flushMailOutbox();
+        });
       } else if (process.env.NODE_ENV !== "production") {
         console.info(`[reset-password] ${user.email}: ${url}`);
       } else {

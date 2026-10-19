@@ -1,6 +1,7 @@
 import { listDepartmentOptions } from "@/modules/departments/departments.query";
 import { UsersManager } from "@/modules/users/components/users-manager";
 import { listUserOptions, searchUsers } from "@/modules/users/users.query";
+import { ASSIGNABLE_ROLES } from "@/shared/constants/role.constant";
 import { readPage, readParam } from "@/shared/libs/list-params.lib";
 import { requireSession } from "@/shared/libs/session.lib";
 
@@ -9,7 +10,7 @@ export default async function UsersPage({ searchParams }: PageProps<"/administra
   const filters = {
     q: readParam(params, "q"),
     departmentId: readParam(params, "departmentId"),
-    role: readParam(params, "role"),
+    role: ASSIGNABLE_ROLES.find((r) => r === readParam(params, "role")),
     page: readPage(params),
   };
   const { user } = await requireSession();

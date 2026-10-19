@@ -110,7 +110,7 @@ export function ApprovalActions({ approvalId, stepName, onBehalfOfName }: Props)
             type="info"
             showIcon
             className="!mb-4"
-            title="Đơn sẽ trả về người đề xuất để bổ sung. Khi họ gửi lại, đơn quay về bước này."
+            title="Đơn sẽ trả về người đề xuất để bổ sung. Khi họ gửi lại, đơn được duyệt lại từ bước đầu."
           />
         )}
         {mode === "reject" && (

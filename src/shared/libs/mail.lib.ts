@@ -9,10 +9,18 @@ type Executor = Pick<typeof db, "insert">;
 export type MailMessage = { to: string; subject: string; text: string };
 
 const MAX_ATTEMPTS = 8;
-const LEASE_MINUTES = 5;
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 10;
+const SEND_TIMEOUT_MS = 60_000;
+const LEASE_MINUTES = Math.ceil((BATCH_SIZE * 2 * SEND_TIMEOUT_MS) / 60_000) + 5;
 
-const transport = env.DEFEAT_SMTP_CONNECTION_URL ? nodemailer.createTransport(env.DEFEAT_SMTP_CONNECTION_URL) : null;
+const transport = env.DEFEAT_SMTP_CONNECTION_URL
+  ? nodemailer.createTransport({
+      url: env.DEFEAT_SMTP_CONNECTION_URL,
+      connectionTimeout: SEND_TIMEOUT_MS,
+      greetingTimeout: SEND_TIMEOUT_MS / 2,
+      socketTimeout: SEND_TIMEOUT_MS,
+    })
+  : null;
 
 export const isMailConfigured = transport !== null;
 
@@ -57,8 +65,6 @@ export async function flushMailOutbox() {
   for (const mail of claimed) {
     try {
       await sendMail({ to: mail.recipient, subject: mail.subject, text: mail.body });
-      await db.update(emailOutbox).set({ sentAt: new Date(), lastError: null }).where(eq(emailOutbox.id, mail.id));
-      sent++;
     } catch (error) {
       const attempts = mail.attempts + 1;
       await db
@@ -70,8 +76,16 @@ export async function flushMailOutbox() {
         })
         .where(eq(emailOutbox.id, mail.id));
       failed++;
+      continue;
     }
+    await db.update(emailOutbox).set({ sentAt: new Date(), body: "", lastError: null }).where(eq(emailOutbox.id, mail.id));
+    sent++;
   }
-  await db.delete(emailOutbox).where(lt(emailOutbox.sentAt, sql`now() - interval '30 days'`));
+  await db
+    .delete(emailOutbox)
+    .where(
+      sql`(${emailOutbox.sentAt} < now() - interval '30 days')
+        or (${emailOutbox.sentAt} is null and ${emailOutbox.attempts} >= ${MAX_ATTEMPTS} and ${emailOutbox.updatedAt} < now() - interval '30 days')`,
+    );
   return { sent, failed };
 }

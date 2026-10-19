@@ -19,7 +19,7 @@ export function readRequestFilters(params: Record<string, string | string[] | un
   const status = readParam(params, "status");
   return {
     q: readParam(params, "q"),
-    status: status && status in REQUEST_STATUS_META ? (status as RequestStatus) : undefined,
+    status: status && Object.hasOwn(REQUEST_STATUS_META, status) ? (status as RequestStatus) : undefined,
     typeId: readParam(params, "typeId"),
     page: readPage(params),
   };

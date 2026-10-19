@@ -14,7 +14,7 @@ import {
 
 const pdf = Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n");
 
-test("người duyệt yêu cầu bổ sung, người làm đơn bổ sung rồi gửi lại, đơn quay về đúng bước", async ({ browser }) => {
+test("người duyệt yêu cầu bổ sung, người làm đơn bổ sung rồi gửi lại, đơn được duyệt lại từ bước đầu", async ({ browser }) => {
   const employee = await apiAs("employee");
   const requestId = await createSubmittedExpense(employee, `Cần bổ sung ${Date.now()}`);
   expect((await callAction(await apiAs("itLead"), "approveRequest", { approvalId: await waitingApprovalId(requestId) }))[1]).toBeNull();
@@ -60,14 +60,16 @@ test("người duyệt yêu cầu bổ sung, người làm đơn bổ sung rồi
       const [request] = await sql`select status, reason from requests where id = ${requestId}`;
       expect(request).toEqual({ status: "PENDING", reason: "Gặp khách hàng tại Đà Nẵng, đã bổ sung hóa đơn VAT" });
       const rounds = await sql`select step_order, result from approvals where request_id = ${requestId} order by created_at`;
-      expect(rounds.map((r) => `${r.step_order}:${r.result}`)).toEqual(["1:APPROVED", "2:RETURNED", "2:WAITING"]);
+      expect(rounds.map((r) => `${r.step_order}:${r.result}`)).toEqual(["1:APPROVED", "2:RETURNED", "1:WAITING"]);
       expect(await sql`select id from attachments where request_id = ${requestId}`).toHaveLength(1);
     });
 
-    await test.step("kế toán duyệt tiếp, đơn sang bước giám đốc tài chính", async () => {
-      expect(
-        (await callAction(await apiAs("accountant"), "approveRequest", { approvalId: await waitingApprovalId(requestId) }))[1],
-      ).toBeNull();
+    await test.step("quản lý và kế toán duyệt lại nội dung đã bổ sung, đơn sang bước giám đốc tài chính", async () => {
+      for (const approver of ["itLead", "accountant"] as const) {
+        expect(
+          (await callAction(await apiAs(approver), "approveRequest", { approvalId: await waitingApprovalId(requestId) }))[1],
+        ).toBeNull();
+      }
       const [next] = await sql`select step_name from approvals where request_id = ${requestId} and result = 'WAITING'`;
       expect(next.step_name).toBe("Giám đốc tài chính duyệt");
     });
@@ -93,6 +95,10 @@ test("đơn đang chờ bổ sung thì hủy được, gửi lại hai lần b�
 
   expect((await callAction(itLead, "returnRequest", { approvalId: await waitingApprovalId(requestId), comment: "Lần 2" }))[1]).toBeNull();
   expect((await callAction(employee, "cancelRequest", { requestId }))[1]).toBeNull();
+  const [lead] = await sql`select id from "user" where email = ${USERS.itLead.email}`;
+  const cancelled = await sql`
+    select id from notifications where user_id = ${lead.id} and type = 'REQUEST_CANCELLED' and href like ${"%" + requestId}`;
+  expect(cancelled).toHaveLength(1);
   const [request] = await sql`select status from requests where id = ${requestId}`;
   expect(request.status).toBe("CANCELLED");
   expect(await sql`select id from approvals where request_id = ${requestId} and result = 'WAITING'`).toHaveLength(0);

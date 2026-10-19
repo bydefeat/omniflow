@@ -201,7 +201,7 @@ DRAFT ──submit──▶ PENDING ──duyệt bước cuối──▶ APPROV
 | `approveRequest` | Khóa đơn rồi khóa lượt (`SELECT ... FOR UPDATE`), kiểm tra `WAITING` và đúng người duyệt → `APPROVED`. Bước kế tiếp lấy từ `snapshot`, không đọc cấu hình hiện tại. Hết bước: đơn `APPROVED`, thông báo người làm đơn |
 | `rejectRequest` | Như trên, bắt buộc `YKienPhanHoi` (zod) → lượt `REJECTED`, đơn `REJECTED`, dừng quy trình, thông báo kèm lý do |
 | `returnRequest` | Như `rejectRequest` nhưng lượt `RETURNED`, đơn `NEEDS_INFO`, báo người làm đơn kèm nội dung cần bổ sung |
-| `resubmitRequest` | Chỉ người làm đơn, đơn `NEEDS_INFO`: kiểm tra biểu mẫu theo `snapshot` → `PENDING` → mở lượt mới cho đúng bước đã trả về |
+| `resubmitRequest` | Chỉ người làm đơn, đơn `NEEDS_INFO`: kiểm tra biểu mẫu theo `snapshot` → `PENDING` → mở lượt mới từ bước đầu (nội dung có thể đã đổi nên các bước trước duyệt lại) |
 | `cancelRequest` | Chỉ người làm đơn, đơn đang PENDING hoặc NEEDS_INFO → `CANCELLED`, các lượt `WAITING` → `CANCELLED`, báo người duyệt (kể cả người giữ vai trò và người được ủy quyền) |
 | `reassignApproval` | Chỉ admin. Giao lượt `WAITING` cho một người cụ thể khi người duyệt bị khóa hoặc không còn ai giữ vai trò; ghi `reassignedById`, `reassignedAt` |
 
@@ -299,7 +299,7 @@ Khi ánh xạ CDM sang code, các chỗ sau trong `docs.md` chưa đủ để c�
 | Không có quan hệ "quản lý trực tiếp" giữa NGUOI_DUNG | Bước `KieuNguoiDuyet = MANAGER` không biết ai duyệt | Thêm `managerId` (tự tham chiếu) vào người dùng |
 | BUOC_DUYET kiểu `ROLE` không nói vai trò nào, phạm vi nào | Không xác định được người duyệt | Thêm `approverRole` (VD: `ACCOUNTANT`, `CFO`) và `approverUserId` (tùy chọn); cần chốt có lọc theo phòng ban không |
 | `DON_YEU_CAU.TrangThai` thiếu `DRAFT` dù UC-02 có "Lưu nháp" | | Thêm `DRAFT` |
-| Bảng tác nhân có "yêu cầu bổ sung" nhưng không có UC hay trạng thái tương ứng | | **Đã làm:** trạng thái `NEEDS_INFO`, lượt `RETURNED`, bổ sung & gửi lại về đúng bước |
+| Bảng tác nhân có "yêu cầu bổ sung" nhưng không có UC hay trạng thái tương ứng | | **Đã làm:** trạng thái `NEEDS_INFO`, lượt `RETURNED`, bổ sung & gửi lại thì duyệt lại từ bước đầu |
 | UC-04 chỉ cho hủy khi "Chờ duyệt" | Đơn nháp không xóa được | Cho hủy cả DRAFT; hoặc chỉ cho hủy PENDING khi chưa có ai duyệt |
 | UY_QUYEN chỉ có một mối kết hợp với NGUOI_DUNG | Không biết ủy quyền cho ai | Hai quan hệ: người ủy quyền và người được ủy quyền |
 | LUOT_PHE_DUYET chưa gắn với người duyệt gốc khi duyệt thay | Audit không biết lượt này duyệt thay ai | Thêm `onBehalfOfId` |

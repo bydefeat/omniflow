@@ -7,7 +7,7 @@ BACKUP_DIR="${BACKUP_DIR:-/var/backups/omniflow}"
 BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-14}"
 
 if [[ -z "${DEFEAT_POSTGRES_PRIMARY_DATABASE_CONNECTION_URL:-}" && -f "$APP_DIR/.env" ]]; then
-  DEFEAT_POSTGRES_PRIMARY_DATABASE_CONNECTION_URL="$(grep -E '^DEFEAT_POSTGRES_PRIMARY_DATABASE_CONNECTION_URL=' "$APP_DIR/.env" | cut -d= -f2-)"
+  DEFEAT_POSTGRES_PRIMARY_DATABASE_CONNECTION_URL="$(grep -E '^DEFEAT_POSTGRES_PRIMARY_DATABASE_CONNECTION_URL=' "$APP_DIR/.env" | cut -d= -f2- | sed -E "s/^['\"]//; s/['\"]$//")"
 fi
 : "${DEFEAT_POSTGRES_PRIMARY_DATABASE_CONNECTION_URL:?Thiếu DEFEAT_POSTGRES_PRIMARY_DATABASE_CONNECTION_URL}"
 
@@ -22,4 +22,4 @@ if [[ -d "$APP_DIR/uploads" ]]; then
   echo "Đã sao lưu tệp đính kèm: $BACKUP_DIR/uploads-$stamp.tar.gz"
 fi
 
-find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'omniflow-*.dump' -o -name 'uploads-*.tar.gz' \) -mtime "+$BACKUP_KEEP_DAYS" -delete
+find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'omniflow-*.dump' -o -name 'uploads-*.tar.gz' \) -mtime "+$((BACKUP_KEEP_DAYS - 1))" -delete
