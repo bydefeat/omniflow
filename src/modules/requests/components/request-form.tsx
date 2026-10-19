@@ -37,6 +37,17 @@ export function RequestForm({ types, draft, submitAction }: Props) {
   const typeId = Form.useWatch("requestTypeId", form) ?? draft?.requestTypeId;
   const type = types.find((t) => t.id === typeId);
 
+  if (draft && !types.some((t) => t.id === draft.requestTypeId)) {
+    return (
+      <Alert
+        type="warning"
+        showIcon
+        title="Loại đơn của bản nháp này đã ngừng sử dụng"
+        description="Bản nháp không thể tiếp tục soạn hay gửi duyệt. Bạn có thể xóa nháp và tạo đơn mới với loại đơn khác."
+      />
+    );
+  }
+
   if (types.length === 0) {
     return (
       <Card>

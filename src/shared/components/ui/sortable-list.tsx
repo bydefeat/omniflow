@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { HolderOutlined } from "@ant-design/icons";
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 
 type SortableListProps<T> = {
   items: T[];
@@ -28,6 +28,7 @@ type SortableListProps<T> = {
 };
 
 export function SortableList<T>({ items, getId, onChange, renderItem }: SortableListProps<T>) {
+  const dndId = useId();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -41,7 +42,7 @@ export function SortableList<T>({ items, getId, onChange, renderItem }: Sortable
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+    <DndContext id={dndId} sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={items.map(getId)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-3">
           {items.map((item, index) => (
