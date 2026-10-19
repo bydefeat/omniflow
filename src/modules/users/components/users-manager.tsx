@@ -5,7 +5,6 @@ import {
   KeyOutlined,
   LockOutlined,
   PlusOutlined,
-  SearchOutlined,
   UnlockOutlined,
 } from "@ant-design/icons";
 import {
@@ -22,9 +21,11 @@ import {
   Tooltip,
 } from "antd";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import type { DepartmentOption } from "@/modules/departments/departments.query";
+import { useListFilters } from "@/shared/hooks/list-filters.hook";
+import { PAGE_SIZE } from "@/shared/libs/list-params.lib";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import {
   ASSIGNABLE_ROLES,
@@ -34,12 +35,15 @@ import {
 import { parseRoles } from "@/shared/libs/role.lib";
 
 import { createUser, setUserBanned, setUserPassword, updateUser } from "../users.action";
-import type { UserRow } from "../users.query";
+import type { UserFilters, UserOption, UserRow } from "../users.query";
 import type { UserCreateValues } from "../users.validation";
 import { RoleTags } from "./role-tags";
 
 type Props = {
   users: UserRow[];
+  total: number;
+  filters: UserFilters;
+  managers: UserOption[];
   departments: DepartmentOption[];
   currentUserId: string;
 };
@@ -49,7 +53,7 @@ const ROLE_OPTIONS = ASSIGNABLE_ROLES.map((value) => ({
   label: ROLE_LABELS[value as keyof typeof ROLE_LABELS] ?? value,
 }));
 
-export function UsersManager({ users, departments, currentUserId }: Props) {
+export function UsersManager({ users, total, filters, managers, departments, currentUserId }: Props) {
   const router = useRouter();
   const { message } = App.useApp();
   const [form] = Form.useForm<UserCreateValues>();
@@ -58,22 +62,7 @@ export function UsersManager({ users, departments, currentUserId }: Props) {
   const [open, setOpen] = useState(false);
   const [passwordFor, setPasswordFor] = useState<UserRow | null>(null);
   const [saving, setSaving] = useState(false);
-  const [search, setSearch] = useState("");
-  const [departmentId, setDepartmentId] = useState<string>();
-  const [role, setRole] = useState<string>();
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return users.filter(
-      (u) =>
-        (!q ||
-          u.name.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q) ||
-          u.employeeCode.toLowerCase().includes(q)) &&
-        (!departmentId || u.departmentId === departmentId) &&
-        (!role || parseRoles(u.role).includes(role)),
-    );
-  }, [users, search, departmentId, role]);
+  const { update, pending } = useListFilters(filters);
 
   function openForm(row: UserRow | null) {
     setEditing(row);
@@ -122,15 +111,15 @@ export function UsersManager({ users, departments, currentUserId }: Props) {
     setPasswordFor(null);
   }
 
-  const managerOptions = users
-    .filter((u) => u.id !== editing?.id && !u.banned)
+  const managerOptions = managers
+    .filter((u) => u.id !== editing?.id)
     .map((u) => ({ value: u.id, label: `${u.name} (${u.employeeCode})` }));
 
   return (
     <>
       <PageHeader
         title="Người dùng"
-        subtitle={`${users.length} tài khoản`}
+        subtitle={`${total} tài khoản`}
         extra={
           <Button type="primary" icon={<PlusOutlined />} onClick={() => openForm(null)}>
             Tạo tài khoản
@@ -139,28 +128,27 @@ export function UsersManager({ users, departments, currentUserId }: Props) {
       />
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <Input
+        <Input.Search
           allowClear
-          prefix={<SearchOutlined />}
           placeholder="Tìm theo tên, email, mã NV"
           className="!w-full sm:!w-72"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          defaultValue={filters.q}
+          onSearch={(q) => update({ q })}
         />
         <Select
           allowClear
           placeholder="Phòng ban"
           className="w-full sm:w-52"
-          value={departmentId}
-          onChange={setDepartmentId}
+          value={filters.departmentId}
+          onChange={(departmentId) => update({ departmentId })}
           options={departments.map((d) => ({ value: d.id, label: d.name }))}
         />
         <Select
           allowClear
           placeholder="Vai trò"
           className="w-full sm:w-52"
-          value={role}
-          onChange={setRole}
+          value={filters.role}
+          onChange={(role) => update({ role })}
           options={ROLE_OPTIONS}
         />
       </div>
@@ -168,9 +156,17 @@ export function UsersManager({ users, departments, currentUserId }: Props) {
       <Table
         rowKey="id"
         size="small"
-        dataSource={filtered}
+        dataSource={users}
+        loading={pending}
         scroll={{ x: 960 }}
-        pagination={{ pageSize: 20, hideOnSinglePage: true }}
+        pagination={{
+          current: filters.page,
+          pageSize: PAGE_SIZE,
+          total,
+          hideOnSinglePage: true,
+          showSizeChanger: false,
+          onChange: (page) => update({ page }),
+        }}
         columns={[
           { title: "Mã NV", dataIndex: "employeeCode", width: 110 },
           {

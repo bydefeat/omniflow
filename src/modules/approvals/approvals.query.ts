@@ -30,8 +30,23 @@ function assignedTo(actor: ActorContext): SQL {
   return or(inArray(approvals.approverId, ids), roles.length ? inArray(approvals.approverRole, roles) : undefined)!;
 }
 
+function assignedToPerson(person: { id: string; roles: string[] }) {
+  return or(
+    eq(approvals.approverId, person.id),
+    person.roles.length ? inArray(approvals.approverRole, person.roles) : undefined,
+  )!;
+}
+
 function pendingFor(actor: ActorContext) {
-  return and(eq(approvals.result, "WAITING"), assignedTo(actor), ne(requests.requesterId, actor.id));
+  return and(
+    eq(approvals.result, "WAITING"),
+    eq(requests.status, "PENDING"),
+    ne(requests.requesterId, actor.id),
+    or(
+      assignedToPerson(actor),
+      ...actor.delegators.map((d) => and(assignedToPerson(d), ne(requests.requesterId, d.id))),
+    ),
+  );
 }
 
 export async function canAccessApprovals(userId: string) {
@@ -93,7 +108,13 @@ export async function getPendingApprovals(userId: string) {
 export type PendingApprovalRow = Awaited<ReturnType<typeof getPendingApprovals>>[number];
 
 export async function countPendingApprovals(userId: string) {
-  return (await getPendingApprovals(userId)).length;
+  const actor = await getActorContext(userId);
+  const [row] = await db
+    .select({ total: count() })
+    .from(approvals)
+    .innerJoin(requests, eq(requests.id, approvals.requestId))
+    .where(pendingFor(actor));
+  return row.total;
 }
 
 const onBehalfOf = alias(user, "on_behalf_of");

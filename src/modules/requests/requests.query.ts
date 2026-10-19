@@ -1,9 +1,10 @@
-import { and, asc, count, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
 
 import { departments } from "@/modules/departments/departments.schema";
 import { requestTypes } from "@/modules/request-types/request-types.schema";
 import { user } from "@/modules/users/users.schema";
 import { db } from "@/shared/libs/db.lib";
+import { escapeLike, PAGE_SIZE } from "@/shared/libs/list-params.lib";
 
 import type { RequestStatus } from "./requests.constant";
 import { attachments, requestItems, requests } from "./requests.schema";
@@ -139,24 +140,45 @@ export async function countMyRequestsByStatus(userId: string) {
   return Object.fromEntries(rows.map((r) => [r.status, r.total])) as Partial<Record<RequestStatus, number>>;
 }
 
-export async function listAllRequests() {
-  return db
-    .select({
-      ...listColumns,
-      requesterName: user.name,
-      requesterCode: user.employeeCode,
-      departmentId: requests.departmentId,
-      departmentName: departments.name,
-    })
-    .from(requests)
-    .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
-    .innerJoin(user, eq(user.id, requests.requesterId))
-    .leftJoin(departments, eq(departments.id, requests.departmentId))
-    .where(ne(requests.status, "DRAFT"))
-    .orderBy(desc(requests.submittedAt));
+export type RequestFilters = { q?: string; status?: RequestStatus; typeId?: string; page: number };
+
+export async function searchRequests(scope: { requesterId?: string }, filters: RequestFilters) {
+  const q = filters.q && `%${escapeLike(filters.q)}%`;
+  const where = and(
+    scope.requesterId ? eq(requests.requesterId, scope.requesterId) : ne(requests.status, "DRAFT"),
+    q
+      ? or(ilike(requests.title, q), ilike(requests.code, q), scope.requesterId ? undefined : ilike(user.name, q))
+      : undefined,
+    filters.status ? eq(requests.status, filters.status) : undefined,
+    filters.typeId ? eq(requests.requestTypeId, filters.typeId) : undefined,
+  );
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select({
+        ...listColumns,
+        requesterName: user.name,
+        requesterCode: user.employeeCode,
+        departmentId: requests.departmentId,
+        departmentName: departments.name,
+      })
+      .from(requests)
+      .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
+      .innerJoin(user, eq(user.id, requests.requesterId))
+      .leftJoin(departments, eq(departments.id, requests.departmentId))
+      .where(where)
+      .orderBy(scope.requesterId ? desc(requests.updatedAt) : sql`${requests.submittedAt} desc nulls last`)
+      .limit(PAGE_SIZE)
+      .offset((filters.page - 1) * PAGE_SIZE),
+    db
+      .select({ total: count() })
+      .from(requests)
+      .innerJoin(user, eq(user.id, requests.requesterId))
+      .where(where),
+  ]);
+  return { rows, total };
 }
 
-export type AdminRequestRow = Awaited<ReturnType<typeof listAllRequests>>[number];
+export type RequestSearchRow = Awaited<ReturnType<typeof searchRequests>>["rows"][number];
 
 export async function getAttachment(attachmentId: string) {
   const [row] = await db

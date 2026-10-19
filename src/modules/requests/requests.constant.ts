@@ -1,3 +1,5 @@
+import { readPage, readParam } from "@/shared/libs/list-params.lib";
+
 export type RequestStatus = "DRAFT" | "PENDING" | "NEEDS_INFO" | "APPROVED" | "REJECTED" | "CANCELLED";
 
 export const REQUEST_STATUS_META: Record<RequestStatus, { label: string; color: string }> = {
@@ -12,3 +14,13 @@ export const REQUEST_STATUS_META: Record<RequestStatus, { label: string; color: 
 export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
 export const ATTACHMENT_MAX_COUNT = 20;
+
+export function readRequestFilters(params: Record<string, string | string[] | undefined>) {
+  const status = readParam(params, "status");
+  return {
+    q: readParam(params, "q"),
+    status: status && status in REQUEST_STATUS_META ? (status as RequestStatus) : undefined,
+    typeId: readParam(params, "typeId"),
+    page: readPage(params),
+  };
+}
