@@ -314,7 +314,7 @@ export async function getReportData() {
       .orderBy(sql`date_trunc('month', ${requests.submittedAt})`),
     db
       .select({
-        key: sql<string>`${requestTypes.id} || ':' || ${approvals.stepOrder}`,
+        key: sql<string>`${requestTypes.id} || ':' || ${approvals.stepOrder} || ':' || ${approvals.stepName}`,
         typeName: requestTypes.name,
         stepOrder: approvals.stepOrder,
         stepName: approvals.stepName,

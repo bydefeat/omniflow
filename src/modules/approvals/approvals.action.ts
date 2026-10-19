@@ -1,6 +1,7 @@
 "use server";
 
 import { and, asc, count, eq, inArray, ne, sql } from "drizzle-orm";
+import { after } from "next/server";
 import { ZSAError } from "zsa";
 
 import { getActiveDelegates } from "@/modules/delegations/delegations.query";
@@ -92,7 +93,7 @@ async function deliver(outbox: Outbox) {
   const recipients = await db
     .select({ id: user.id, email: user.email, name: user.name })
     .from(user)
-    .where(inArray(user.id, [...new Set(outbox.flatMap((m) => m.userIds))]));
+    .where(and(inArray(user.id, [...new Set(outbox.flatMap((m) => m.userIds))]), sql`${user.banned} is not true`));
   for (const message of outbox) {
     for (const recipient of recipients.filter((r) => message.userIds.includes(r.id))) {
       void sendMail({
@@ -107,7 +108,7 @@ async function deliver(outbox: Outbox) {
 async function inTransaction<T>(work: (tx: Tx, outbox: Outbox) => Promise<T>) {
   const outbox: Outbox = [];
   const result = await db.transaction((tx) => work(tx, outbox));
-  void deliver(outbox).catch((error) => console.error("[notify] không gửi được email", error));
+  after(() => deliver(outbox).catch((error) => console.error("[notify] không gửi được email", error)));
   return result;
 }
 

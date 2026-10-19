@@ -37,7 +37,7 @@ Các chỗ thiếu trong `docs.md` (xem `ARCHITECTURE.md` mục 6) tạm chốt 
 | G5 | Ủy quyền có người ủy quyền và người được ủy quyền; xét lúc đọc/duyệt. Một người không có hai ủy quyền `ACTIVE` chồng thời gian |
 | G6 | Khóa tài khoản (`LOCKED`) dùng `banned` của plugin `admin` better-auth, không thêm cột `status` riêng |
 | G7 | Thông báo luôn có trong ứng dụng. Khi có `DEFEAT_SMTP_CONNECTION_URL` thì gửi thêm email (đặt lại mật khẩu, mọi thông báo duyệt), gửi sau khi transaction commit |
-| G8 | Tệp đính kèm lưu ổ đĩa local (`uploads/`, đã gitignore), hoặc S3/R2/MinIO khi có `DEFEAT_S3_BUCKET_NAME`; tối đa 10 MB/tệp, chỉ PDF, ảnh, Excel, Word, kiểm tra cả đuôi tệp và chữ ký nội dung |
+| G8 | Tệp đính kèm lưu ổ đĩa local (`uploads/`, đã gitignore), hoặc S3/R2/MinIO khi có `DEFEAT_S3_BUCKET_NAME`; tối đa 10 MB/tệp, chỉ PDF, ảnh, Excel, Word, kiểm tra cả đuôi tệp và chữ ký nội dung (chấp nhận cả `.xls` dạng HTML/XML do ERP xuất, `.doc` dạng RTF); loại MIME lưu theo đuôi tệp, không tin trình duyệt |
 | G9 | SLA chỉ để báo cáo và tô màu quá hạn; không tự động chuyển cấp hay nhắc nhở |
 
 ## 2. Thiết kế database (PDM)
@@ -344,7 +344,7 @@ Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` �
 | zsa 0.6 viết cho zod 3 | Input JSON chạy được; input `formData` hỏng nên đã tránh. Action có schema `.refine()` lồng trong mảng thì zsa không suy được kiểu `input` → ép kiểu bằng `z.infer` (xem `request-types.action.ts`, `delegations.action.ts`). Muốn bỏ zsa thì chỉ sửa `action.lib.ts` và các `*.action.ts` |
 | Server component dùng component antd | Chỉ dùng export có tên (`Button`, `Tag`); **không** dùng `X.Y` (`Layout.Content`, `Descriptions.Item`...) và không dùng icon trong server component — đặt chúng trong component `"use client"` |
 | `cacheComponents` | Không dùng `new Date()` / `Math.random()` khi render ở phần tĩnh; `next dev` có cảnh báo "uncached data" ở layout portal (đọc session ngoài `<Suspense>` của segment) — không chặn build, xử lý sau nếu cần điều hướng tức thì |
-| Rate limit đăng nhập của better-auth (production) | Lưu trong bảng `rate_limit` nên có hiệu lực chung khi chạy nhiều instance; script tự động cần đợi rồi thử lại |
+| Rate limit đăng nhập của better-auth (production) | Lưu trong bảng `rate_limit` nên có hiệu lực chung khi chạy nhiều instance; script tự động cần đợi rồi thử lại. Chạy sau nhiều tầng proxy thì cấu hình `advanced.ipAddress` trong `auth.lib.ts` theo hạ tầng, nếu không mọi người dùng có thể dùng chung một hạn mức |
 | Danh sách người dùng / đơn lọc phía client | Đủ cho vài nghìn dòng; lớn hơn thì chuyển sang phân trang và lọc ở server (query nhận tham số từ `searchParams`) |
 | Đếm "chờ tôi duyệt" chạy lại cả truy vấn danh sách | Đủ ở quy mô nội bộ; chậm thì viết truy vấn `count` riêng |
 | Lưu tệp | Mặc định ổ đĩa local (`uploads/`), không dùng được khi chạy nhiều instance; đặt `DEFEAT_S3_*` để dùng S3/R2/MinIO (`storage.lib.ts`) |

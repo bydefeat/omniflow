@@ -26,7 +26,7 @@ function localDriver(): Driver {
 
 function s3Driver(bucket: string): Driver {
   const client = new S3Client({
-    region: env.DEFEAT_S3_REGION,
+    region: env.DEFEAT_S3_REGION ?? "auto",
     endpoint: env.DEFEAT_S3_ENDPOINT_URL,
     forcePathStyle: Boolean(env.DEFEAT_S3_ENDPOINT_URL),
     credentials:

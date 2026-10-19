@@ -13,10 +13,9 @@ import { deleteStoredFile, saveFile } from "@/shared/libs/storage.lib";
 import {
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_MAX_COUNT,
-  ATTACHMENT_MIME_TYPES,
 } from "./requests.constant";
 import { attachments, requestItems, requests } from "./requests.schema";
-import { matchesFileKind } from "./requests.service";
+import { isAllowedAttachmentName, resolveAttachmentType } from "./requests.service";
 import {
   attachmentIdInput,
   attachmentUploadInput,
@@ -175,13 +174,14 @@ async function saveAttachment(requestId: string, file: File, userId: string) {
   if (file.size > ATTACHMENT_MAX_BYTES) {
     throw new ZSAError("PAYLOAD_TOO_LARGE", "Tệp vượt quá 10 MB");
   }
-  if (!ATTACHMENT_MIME_TYPES.includes(file.type)) {
+  if (!isAllowedAttachmentName(file.name)) {
     throw new ZSAError("UNPROCESSABLE_CONTENT", "Chỉ nhận PDF, ảnh, Word hoặc Excel");
   }
   await findOwnDraft(db, requestId, userId);
 
   const data = new Uint8Array(await file.arrayBuffer());
-  if (!matchesFileKind(data, file.type, file.name)) {
+  const mimeType = resolveAttachmentType(data, file.name);
+  if (!mimeType) {
     throw new ZSAError("UNPROCESSABLE_CONTENT", "Nội dung hoặc đuôi tệp không khớp với định dạng PDF, ảnh, Word hoặc Excel");
   }
   const storageKey = await saveFile(data);
@@ -201,7 +201,7 @@ async function saveAttachment(requestId: string, file: File, userId: string) {
           requestId: draft.id,
           fileName: file.name.slice(0, 255),
           storageKey,
-          mimeType: file.type,
+          mimeType,
           sizeBytes: file.size,
           uploadedById: userId,
         })

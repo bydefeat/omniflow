@@ -5,12 +5,8 @@ import { Alert, App, Button, Popconfirm, Upload } from "antd";
 import { useState } from "react";
 
 import { deleteAttachment, uploadAttachment } from "../requests.action";
-import {
-  ATTACHMENT_ACCEPT,
-  ATTACHMENT_MAX_BYTES,
-  ATTACHMENT_MIME_TYPES,
-} from "../requests.constant";
-import { formatFileSize } from "../requests.service";
+import { ATTACHMENT_MAX_BYTES } from "../requests.constant";
+import { ATTACHMENT_ACCEPT, formatFileSize, isAllowedAttachmentName } from "../requests.service";
 
 export type AttachmentItem = {
   id: string;
@@ -32,7 +28,7 @@ export function AttachmentsPanel({ requestId, attachments, editable = false }: P
   async function upload(file: File) {
     if (!requestId) return;
     if (file.size > ATTACHMENT_MAX_BYTES) return message.error(`${file.name}: vượt quá 10 MB`);
-    if (!ATTACHMENT_MIME_TYPES.includes(file.type)) {
+    if (!isAllowedAttachmentName(file.name)) {
       return message.error(`${file.name}: chỉ nhận PDF, ảnh, Word hoặc Excel`);
     }
     const body = new FormData();

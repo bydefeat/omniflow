@@ -1,34 +1,49 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { matchesFileKind } from "./requests.service";
+import { resolveAttachmentType } from "./requests.service";
 
 const bytes = (...parts: (number[] | string)[]) =>
   new Uint8Array(parts.flatMap((p) => (typeof p === "string" ? [...Buffer.from(p, "latin1")] : p)));
 
-const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const OLE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
+const ZIP = [0x50, 0x4b, 0x03, 0x04];
 
-describe("matchesFileKind", () => {
-  it("accepts files whose content, type and extension agree", () => {
-    assert.ok(matchesFileKind(bytes("%PDF-1.7\n"), "application/pdf", "hoa_don.PDF"));
-    assert.ok(matchesFileKind(bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "image/png", "a.png"));
-    assert.ok(matchesFileKind(bytes([0xff, 0xd8, 0xff, 0xe0]), "image/jpeg", "a.jpeg"));
-    assert.ok(matchesFileKind(bytes("RIFF", [0, 0, 0, 0], "WEBPVP8 "), "image/webp", "a.webp"));
-    assert.ok(matchesFileKind(bytes([0x50, 0x4b, 0x03, 0x04], "....word/document.xml"), DOCX, "bao_gia.docx"));
-    assert.ok(matchesFileKind(bytes([0x50, 0x4b, 0x03, 0x04], "....xl/workbook.xml"), XLSX, "bang_ke.xlsx"));
-    assert.ok(matchesFileKind(bytes([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), "application/vnd.ms-excel", "a.xls"));
+describe("resolveAttachmentType", () => {
+  it("returns the canonical type when extension and content agree", () => {
+    assert.equal(resolveAttachmentType(bytes("%PDF-1.7\n"), "hoa_don.PDF"), "application/pdf");
+    assert.equal(resolveAttachmentType(bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), "a.png"), "image/png");
+    assert.equal(resolveAttachmentType(bytes([0xff, 0xd8, 0xff, 0xe1]), "anh.jfif"), "image/jpeg");
+    assert.equal(resolveAttachmentType(bytes("RIFF", [0, 0, 0, 0], "WEBPVP8 "), "a.webp"), "image/webp");
+    assert.equal(
+      resolveAttachmentType(bytes(ZIP, "....word/document.xml"), "bao_gia.docx"),
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    assert.equal(
+      resolveAttachmentType(bytes(ZIP, "....xl/workbook.xml"), "bang_ke.xlsx"),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
   });
 
-  it("rejects content that does not match the declared type", () => {
-    assert.ok(!matchesFileKind(bytes("<html><script>"), "application/pdf", "hoa_don.pdf"));
-    assert.ok(!matchesFileKind(bytes("MZ\x90\x00"), "image/png", "a.png"));
-    assert.ok(!matchesFileKind(bytes([0x50, 0x4b, 0x03, 0x04], "evil/payload"), DOCX, "a.docx"));
+  it("accepts common real-world variants", () => {
+    assert.equal(resolveAttachmentType(bytes("\r\n  %PDF-1.4"), "scan.pdf"), "application/pdf");
+    assert.equal(resolveAttachmentType(bytes(OLE), "bang_ke.xls"), "application/vnd.ms-excel");
+    assert.equal(resolveAttachmentType(bytes([0xef, 0xbb, 0xbf], "<html><table>"), "sao_ke.xls"), "application/vnd.ms-excel");
+    assert.equal(resolveAttachmentType(bytes('<?xml version="1.0"?><Workbook>'), "erp.xls"), "application/vnd.ms-excel");
+    assert.equal(resolveAttachmentType(bytes("{\\rtf1\\ansi"), "to_trinh.doc"), "application/msword");
+    assert.equal(resolveAttachmentType(bytes(OLE), "to_trinh.doc"), "application/msword");
   });
 
-  it("rejects mismatched extensions and unknown types", () => {
-    assert.ok(!matchesFileKind(bytes("%PDF-1.7"), "application/pdf", "hoa_don.exe"));
-    assert.ok(!matchesFileKind(bytes("%PDF-1.7"), "application/pdf", "hoa_don"));
-    assert.ok(!matchesFileKind(bytes("<svg>"), "image/svg+xml", "a.svg"));
+  it("rejects content that does not match the extension", () => {
+    assert.equal(resolveAttachmentType(bytes("<html><script>"), "hoa_don.pdf"), null);
+    assert.equal(resolveAttachmentType(bytes("MZ\x90\x00"), "a.png"), null);
+    assert.equal(resolveAttachmentType(bytes(ZIP, "evil/payload"), "a.docx"), null);
+    assert.equal(resolveAttachmentType(bytes("<html>"), "a.doc"), null);
+  });
+
+  it("rejects unknown or missing extensions", () => {
+    assert.equal(resolveAttachmentType(bytes("%PDF-1.7"), "hoa_don.exe"), null);
+    assert.equal(resolveAttachmentType(bytes("%PDF-1.7"), "hoa_don"), null);
+    assert.equal(resolveAttachmentType(bytes("<svg>"), "a.svg"), null);
   });
 });
