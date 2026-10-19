@@ -75,3 +75,13 @@ test("nhân viên gọi action quản trị đều bị từ chối", async () =
     expect(error?.code, name).toBe("FORBIDDEN");
   }
 });
+
+test("trang có header bảo mật chống nhúng khung và lộ thông tin", async ({ request }) => {
+  const response = await request.get("/authentication/sign-in");
+  const headers = response.headers();
+  expect(headers["x-frame-options"]).toBe("DENY");
+  expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+  expect(headers["x-content-type-options"]).toBe("nosniff");
+  expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+  expect(headers["x-powered-by"]).toBeUndefined();
+});
