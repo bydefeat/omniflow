@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -9,7 +9,10 @@ import {
   type Page,
   request as playwrightRequest,
 } from "@playwright/test";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import postgres from "postgres";
+
+import { MAILBOX } from "./mail-sink";
 
 const root = path.resolve(__dirname, "../..");
 try {
@@ -159,16 +162,85 @@ export async function waitingApprovalId(requestId: string) {
   return row?.id as string | undefined;
 }
 
-export async function openDialog(trigger: Locator, dialog: Locator) {
+export async function clickUntilVisible(trigger: Locator, expected: Locator) {
   await expect(async () => {
     await trigger.click();
-    await expect(dialog).toBeVisible({ timeout: 2_000 });
+    await expect(expected.first()).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
 }
+
+export const openDialog = clickUntilVisible;
 
 export async function refreshAuth(user: UserKey) {
   const context = await playwrightRequest.newContext({ baseURL: BASE_URL });
   await signIn(context, USERS[user].email, USERS[user].password);
   await context.storageState({ path: authFile(user) });
   await context.dispose();
+}
+
+export function s3Credentials() {
+  const accessKeyId = process.env.DEFEAT_S3_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.DEFEAT_S3_SECRET_ACCESS_KEY;
+  return accessKeyId && secretAccessKey ? { accessKeyId, secretAccessKey } : undefined;
+}
+
+const bucket = process.env.DEFEAT_S3_BUCKET_NAME;
+const s3 = bucket
+  ? new S3Client({
+      region: process.env.DEFEAT_S3_REGION || "auto",
+      endpoint: process.env.DEFEAT_S3_ENDPOINT_URL || undefined,
+      forcePathStyle: Boolean(process.env.DEFEAT_S3_ENDPOINT_URL),
+      credentials: s3Credentials(),
+    })
+  : null;
+const uploads = path.join(root, "uploads");
+
+export async function putStoredObject(key: string, data: string) {
+  if (s3) {
+    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: data }));
+    return;
+  }
+  mkdirSync(uploads, { recursive: true });
+  writeFileSync(path.join(uploads, key), data);
+}
+
+export async function storedObjectExists(key: string) {
+  if (s3) {
+    return s3
+      .send(new GetObjectCommand({ Bucket: bucket, Key: key }))
+      .then(() => true)
+      .catch(() => false);
+  }
+  return existsSync(path.join(uploads, key));
+}
+
+export type SentMail = { from: string; to: string[]; data: string };
+
+export async function waitForMail(match: (mail: SentMail) => boolean) {
+  let found: SentMail | undefined;
+  await expect
+    .poll(
+      () => {
+        const lines = existsSync(MAILBOX) ? readFileSync(MAILBOX, "utf8").split("\n").filter(Boolean) : [];
+        found = lines.map((l) => JSON.parse(l) as SentMail).find(match);
+        return Boolean(found);
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  return found!;
+}
+
+export function decodeMailBody(mail: SentMail) {
+  const split = mail.data.indexOf("\n\n");
+  const headers = mail.data.slice(0, split).toLowerCase();
+  const body = mail.data.slice(split + 2);
+  if (headers.includes("content-transfer-encoding: base64")) {
+    return Buffer.from(body.replace(/\s+/g, ""), "base64").toString("utf8");
+  }
+  if (headers.includes("content-transfer-encoding: quoted-printable")) {
+    const bytes = body.replace(/=\n/g, "").replace(/=([0-9A-F]{2})/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    return Buffer.from(bytes, "latin1").toString("utf8");
+  }
+  return body;
 }

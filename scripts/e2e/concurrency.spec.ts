@@ -1,6 +1,3 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
-
 import { expect, test } from "@playwright/test";
 import { uuidv7 } from "uuidv7";
 
@@ -9,14 +6,14 @@ import {
   callAction,
   createSubmittedExpense,
   expenseDraft,
+  putStoredObject,
   requestTypeId,
   sql,
+  storedObjectExists,
   USERS,
   waitForBlockedQuery,
   waitingApprovalId,
 } from "./helpers";
-
-const uploads = path.resolve(__dirname, "../../uploads");
 
 async function createDraft(title: string) {
   const employee = await apiAs("employee");
@@ -30,14 +27,13 @@ async function createDraft(title: string) {
 
 async function addStoredAttachment(requestId: string) {
   const storageKey = uuidv7();
-  mkdirSync(uploads, { recursive: true });
-  writeFileSync(path.join(uploads, storageKey), "%PDF-1.4\n%%EOF\n");
+  await putStoredObject(storageKey, "%PDF-1.4\n%%EOF\n");
   const [requester] = await sql`select requester_id from requests where id = ${requestId}`;
   const [row] = await sql`
     insert into attachments (id, request_id, file_name, storage_key, mime_type, size_bytes, uploaded_by_id)
     values (${uuidv7()}, ${requestId}, 'bao_gia.pdf', ${storageKey}, 'application/pdf', 15, ${requester.requester_id})
     returning id`;
-  return { attachmentId: row.id as string, file: path.join(uploads, storageKey) };
+  return { attachmentId: row.id as string, storageKey };
 }
 
 async function whileSubmitting<T>(requestId: string, action: () => Promise<T>, lock: "request" | "type" = "request") {
@@ -87,12 +83,12 @@ test("lưu nháp trùng lúc gửi đơn không ghi đè hạng mục của đơ
 
 test("xóa nháp trùng lúc gửi đơn không xóa đơn và tệp đính kèm", async () => {
   const { employee, id } = await createDraft(`Race delete ${Date.now()}`);
-  const { file } = await addStoredAttachment(id);
+  const { storageKey } = await addStoredAttachment(id);
   try {
     const [, error] = await whileSubmitting(id, () => callAction(employee, "deleteDraft", { requestId: id }));
     expect(error?.code).toBe("NOT_FOUND");
     expect((await sql`select id from requests where id = ${id}`).length).toBe(1);
-    expect(existsSync(file)).toBe(true);
+    expect(await storedObjectExists(storageKey)).toBe(true);
   } finally {
     await retire(id);
   }
@@ -100,12 +96,12 @@ test("xóa nháp trùng lúc gửi đơn không xóa đơn và tệp đính kèm
 
 test("xóa tệp trùng lúc gửi đơn không làm mất tệp của đơn đã gửi", async () => {
   const { employee, id } = await createDraft(`Race attachment ${Date.now()}`);
-  const { attachmentId, file } = await addStoredAttachment(id);
+  const { attachmentId, storageKey } = await addStoredAttachment(id);
   try {
     const [, error] = await whileSubmitting(id, () => callAction(employee, "deleteAttachment", { attachmentId }));
     expect(error?.code).toBe("NOT_FOUND");
     expect((await sql`select id from attachments where id = ${attachmentId}`).length).toBe(1);
-    expect(existsSync(file)).toBe(true);
+    expect(await storedObjectExists(storageKey)).toBe(true);
   } finally {
     await retire(id);
   }

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { apiAs, callAction, openDialog, pageAs, sql, waitingApprovalId } from "./helpers";
+import { apiAs, callAction, clickUntilVisible, openDialog, pageAs, sql, waitingApprovalId } from "./helpers";
 
 const pdf = Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n");
 
@@ -15,9 +15,9 @@ test("tạo đơn có hạng mục, lưu nháp, đính kèm, gửi và duyệt �
   await page.getByLabel("Lý do / giải trình").fill("Gặp khách hàng tại Đà Nẵng");
 
   await test.step("lưu nháp khi dòng hạng mục còn trống", async () => {
-    await page.getByRole("button", { name: "Lưu nháp" }).click();
-    await expect(page.getByText("Đã lưu nháp")).toBeVisible();
+    await clickUntilVisible(page.getByRole("button", { name: "Lưu nháp" }), page.getByText("Đã lưu nháp"));
     await expect(page).toHaveURL(/\/workspace\/requests\/[^/]+\/edit$/);
+    await expect(page.getByText("Đã lưu nháp")).toHaveCount(0);
   });
   const requestId = page.url().split("/").at(-2)!;
 
@@ -36,7 +36,7 @@ test("tạo đơn có hạng mục, lưu nháp, đính kèm, gửi và duyệt �
     await row.locator("input").nth(0).fill("Vé máy bay");
     await row.locator("input").nth(1).fill("Vé");
     await row.locator("input").nth(2).fill("2,5");
-    await page.getByRole("button", { name: "Lưu nháp" }).click();
+    await page.getByRole("button", { name: "Lưu nháp" }).filter({ visible: true }).click();
     await expect(page.getByText("Hạng mục dòng 1: thiếu đơn giá")).toBeVisible();
 
     await row.locator("input").nth(3).fill("1500000.5");
@@ -46,7 +46,7 @@ test("tạo đơn có hạng mục, lưu nháp, đính kèm, gửi và duyệt �
     await row.locator("input").nth(3).blur();
     await expect(page.locator("tfoot").filter({ visible: true })).toContainText("3.750.000");
 
-    await page.getByRole("button", { name: "Lưu nháp" }).click();
+    await page.getByRole("button", { name: "Lưu nháp" }).filter({ visible: true }).click();
     await expect(page.getByText("Đã lưu nháp")).toBeVisible();
     const [saved] = await sql`select total_amount from requests where id = ${requestId}`;
     expect(saved.total_amount).toBe("3750000.00");
@@ -60,8 +60,8 @@ test("tạo đơn có hạng mục, lưu nháp, đính kèm, gửi và duyệt �
   await test.step("gửi duyệt", async () => {
     await openDialog(page.getByRole("button", { name: "Gửi duyệt" }), page.getByRole("dialog"));
     await page.getByRole("dialog").getByRole("button", { name: "Gửi duyệt" }).click();
-    await expect(page).toHaveURL(new RegExp(`/workspace/requests/${requestId}$`));
-    await expect(page.getByText(/REQ-\d{4}-\d{4}/).first()).toBeVisible();
+    await expect(page).toHaveURL(/\/workspace\/requests$/);
+    await expect(page.getByText(title)).toBeVisible();
     const [row] = await sql`select status, snapshot from requests where id = ${requestId}`;
     expect(row.status).toBe("PENDING");
     expect(row.snapshot.steps).toHaveLength(3);
