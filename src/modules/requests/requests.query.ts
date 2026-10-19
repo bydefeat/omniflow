@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne } from "drizzle-orm";
 
 import { departments } from "@/modules/departments/departments.schema";
 import { requestTypes } from "@/modules/request-types/request-types.schema";
@@ -47,9 +47,19 @@ export async function getDraftForEdit(requestId: string, userId: string) {
       title: requests.title,
       reason: requests.reason,
       formData: requests.formData,
+      status: requests.status,
+      snapshot: requests.snapshot,
+      typeName: requestTypes.name,
     })
     .from(requests)
-    .where(and(eq(requests.id, requestId), eq(requests.requesterId, userId), eq(requests.status, "DRAFT")));
+    .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
+    .where(
+      and(
+        eq(requests.id, requestId),
+        eq(requests.requesterId, userId),
+        inArray(requests.status, ["DRAFT", "NEEDS_INFO"]),
+      ),
+    );
   if (!request) return null;
   return { ...request, ...(await loadChildren(requestId)) };
 }

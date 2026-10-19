@@ -9,7 +9,7 @@ import { REQUEST_STATUS_META, type RequestStatus } from "../requests.constant";
 import type { MyRequestRow } from "../requests.query";
 import { RequestStatusTag } from "./request-status-tag";
 
-const SHOWN: RequestStatus[] = ["DRAFT", "PENDING", "APPROVED", "REJECTED"];
+const SHOWN: RequestStatus[] = ["DRAFT", "PENDING", "NEEDS_INFO", "APPROVED", "REJECTED"];
 
 export function MyRequestsSummary({
   counts,

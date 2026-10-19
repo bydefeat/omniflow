@@ -15,6 +15,11 @@ export const rejectInput = z.object({
   comment: z.string().trim().min(1, "Vui lòng nhập lý do từ chối").max(500, "Tối đa 500 ký tự"),
 });
 
+export const returnInput = z.object({
+  approvalId: z.string().min(1),
+  comment: z.string().trim().min(1, "Vui lòng nêu nội dung cần bổ sung").max(500, "Tối đa 500 ký tự"),
+});
+
 export const submitInput = z.object({ requestId: z.string().min(1) });
 
 export const cancelInput = z.object({ requestId: z.string().min(1) });

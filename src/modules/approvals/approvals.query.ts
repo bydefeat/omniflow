@@ -174,11 +174,14 @@ export async function getApprovalTimeline(requestId: string) {
     .leftJoin(onBehalfOf, eq(onBehalfOf.id, approvals.onBehalfOfId))
     .leftJoin(reassignedBy, eq(reassignedBy.id, approvals.reassignedById))
     .where(eq(approvals.requestId, requestId))
-    .orderBy(asc(approvals.stepOrder));
+    .orderBy(asc(approvals.createdAt));
 
-  const lastOrder = rounds.at(-1)?.stepOrder ?? 0;
+  const lastOrder = Math.max(
+    0,
+    ...rounds.filter((r) => r.result === "APPROVED" || r.result === "WAITING").map((r) => r.stepOrder),
+  );
   const upcoming =
-    request.status === "DRAFT" || request.status === "PENDING"
+    request.status === "DRAFT" || request.status === "PENDING" || request.status === "NEEDS_INFO"
       ? (request.snapshot?.steps ?? (await getApprovalSteps(request.requestTypeId)))
           .filter((s) => s.stepOrder > lastOrder)
           .map((s) => ({ stepOrder: s.stepOrder, name: s.name, approverRole: s.approverRole }))
@@ -227,6 +230,17 @@ export async function canViewRequest(requestId: string, userId: string) {
     .where(and(eq(approvals.requestId, requestId), or(assignedTo(actor), eq(approvals.actedById, userId))))
     .limit(1);
   return Boolean(involved);
+}
+
+export async function getLatestReturn(requestId: string) {
+  const [row] = await db
+    .select({ stepName: approvals.stepName, comment: approvals.comment, actedByName: actedBy.name, decidedAt: approvals.decidedAt })
+    .from(approvals)
+    .leftJoin(actedBy, eq(actedBy.id, approvals.actedById))
+    .where(and(eq(approvals.requestId, requestId), eq(approvals.result, "RETURNED")))
+    .orderBy(desc(approvals.decidedAt))
+    .limit(1);
+  return row ?? null;
 }
 
 export async function getWaitingRound(requestId: string) {
@@ -327,7 +341,7 @@ export async function getReportData() {
       .from(approvals)
       .innerJoin(requests, eq(requests.id, approvals.requestId))
       .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
-      .where(inArray(approvals.result, ["APPROVED", "REJECTED"]))
+      .where(inArray(approvals.result, ["APPROVED", "REJECTED", "RETURNED"]))
       .groupBy(requestTypes.id, requestTypes.name, approvals.stepOrder, approvals.stepName)
       .orderBy(asc(requestTypes.name), asc(approvals.stepOrder)),
     db
@@ -336,7 +350,7 @@ export async function getReportData() {
         onTime: sql<number>`count(*) filter (where ${approvals.decidedAt} <= ${approvals.dueAt})`.mapWith(Number),
       })
       .from(approvals)
-      .where(inArray(approvals.result, ["APPROVED", "REJECTED"])),
+      .where(inArray(approvals.result, ["APPROVED", "REJECTED", "RETURNED"])),
   ]);
   return { byType, monthly, stepDurations, sla };
 }

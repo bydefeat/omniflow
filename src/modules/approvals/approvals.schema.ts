@@ -7,7 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
 
@@ -19,6 +19,7 @@ export const approvalResult = pgEnum("approval_result", [
   "WAITING",
   "APPROVED",
   "REJECTED",
+  "RETURNED",
   "CANCELLED",
 ]);
 
@@ -44,7 +45,8 @@ export const approvals = pgTable(
     ...timestamps,
   },
   (t) => [
-    unique().on(t.requestId, t.stepOrder),
+    index().on(t.requestId, t.stepOrder),
+    uniqueIndex("approvals_one_waiting_per_request").on(t.requestId).where(sql`${t.result} = 'WAITING'`),
     index().on(t.approverId, t.result),
     index().on(t.approverRole, t.result),
     check(
@@ -53,11 +55,11 @@ export const approvals = pgTable(
     ),
     check(
       "approvals_reject_needs_comment",
-      sql`${t.result} <> 'REJECTED' or ${t.comment} is not null`,
+      sql`${t.result}::text not in ('REJECTED', 'RETURNED') or ${t.comment} is not null`,
     ),
     check(
       "approvals_decided_fields",
-      sql`(${t.result} in ('APPROVED', 'REJECTED')) = (${t.actedById} is not null and ${t.decidedAt} is not null)`,
+      sql`(${t.result}::text in ('APPROVED', 'REJECTED', 'RETURNED')) = (${t.actedById} is not null and ${t.decidedAt} is not null)`,
     ),
   ],
 );

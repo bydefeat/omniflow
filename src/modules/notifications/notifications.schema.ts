@@ -15,6 +15,7 @@ export const notificationType = pgEnum("notification_type", [
   "REQUEST_APPROVED",
   "REQUEST_REJECTED",
   "REQUEST_CANCELLED",
+  "REQUEST_RETURNED",
 ]);
 
 export const notifications = pgTable(

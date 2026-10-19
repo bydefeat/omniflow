@@ -1,10 +1,10 @@
 "use server";
 
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { ZSAError } from "zsa";
 
 import { requestTypes } from "@/modules/request-types/request-types.schema";
-import { buildFormValidator } from "@/modules/request-types/request-types.validation";
+import { buildFormValidator, type FormField } from "@/modules/request-types/request-types.validation";
 import { authedProcedure } from "@/shared/libs/action.lib";
 import { db } from "@/shared/libs/db.lib";
 import { getSession } from "@/shared/libs/session.lib";
@@ -13,6 +13,7 @@ import { deleteStoredFile, saveFile } from "@/shared/libs/storage.lib";
 import {
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_MAX_COUNT,
+  type RequestStatus,
 } from "./requests.constant";
 import { attachments, requestItems, requests } from "./requests.schema";
 import { isAllowedAttachmentName, resolveAttachmentType } from "./requests.service";
@@ -40,7 +41,7 @@ async function loadActiveType(requestTypeId: string) {
   return type;
 }
 
-function parseDraftFormData(type: Awaited<ReturnType<typeof loadActiveType>>, formData: Record<string, unknown>) {
+function parseDraftFormData(type: { formSchema: FormField[] }, formData: Record<string, unknown>) {
   const parsed = buildFormValidator(type.formSchema, { partial: true }).safeParse(formData);
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
@@ -77,11 +78,19 @@ async function replaceItems(tx: Tx, requestId: string, items: LineItemInput[], h
     .where(eq(requests.id, requestId));
 }
 
-async function findOwnDraft(executor: Tx | typeof db, requestId: string, userId: string, lock = false) {
+const EDITABLE: RequestStatus[] = ["DRAFT", "NEEDS_INFO"];
+
+async function findOwnDraft(
+  executor: Tx | typeof db,
+  requestId: string,
+  userId: string,
+  lock = false,
+  statuses: RequestStatus[] = ["DRAFT"],
+) {
   const query = executor
-    .select({ id: requests.id, requestTypeId: requests.requestTypeId })
+    .select({ id: requests.id, requestTypeId: requests.requestTypeId, snapshot: requests.snapshot })
     .from(requests)
-    .where(and(eq(requests.id, requestId), eq(requests.requesterId, userId), eq(requests.status, "DRAFT")));
+    .where(and(eq(requests.id, requestId), eq(requests.requesterId, userId), inArray(requests.status, statuses)));
   const [request] = lock ? await query.for("update") : await query;
   if (!request) throw new ZSAError("NOT_FOUND", "Không tìm thấy đơn nháp của bạn");
   return request;
@@ -115,12 +124,12 @@ export const updateDraft = authedProcedure
   .createServerAction()
   .input(requestDraftUpdateInput)
   .handler(async ({ input, ctx }) => {
-    const { requestTypeId } = await findOwnDraft(db, input.id, ctx.user.id);
-    const type = await loadActiveType(requestTypeId);
+    const current = await findOwnDraft(db, input.id, ctx.user.id, false, EDITABLE);
+    const type = current.snapshot ?? (await loadActiveType(current.requestTypeId));
     const formData = parseDraftFormData(type, input.formData);
 
     await db.transaction(async (tx) => {
-      const draft = await findOwnDraft(tx, input.id, ctx.user.id, true);
+      const draft = await findOwnDraft(tx, input.id, ctx.user.id, true, EDITABLE);
       await tx.update(requests).set({ title: input.title, reason: input.reason, formData }).where(eq(requests.id, draft.id));
       await replaceItems(tx, draft.id, input.items, type.hasLineItems);
     });
@@ -177,7 +186,7 @@ async function saveAttachment(requestId: string, file: File, userId: string) {
   if (!isAllowedAttachmentName(file.name)) {
     throw new ZSAError("UNPROCESSABLE_CONTENT", "Chỉ nhận PDF, ảnh, Word hoặc Excel");
   }
-  await findOwnDraft(db, requestId, userId);
+  await findOwnDraft(db, requestId, userId, false, EDITABLE);
 
   const data = new Uint8Array(await file.arrayBuffer());
   const mimeType = resolveAttachmentType(data, file.name);
@@ -187,7 +196,7 @@ async function saveAttachment(requestId: string, file: File, userId: string) {
   const storageKey = await saveFile(data);
   try {
     return await db.transaction(async (tx) => {
-      const draft = await findOwnDraft(tx, requestId, userId, true);
+      const draft = await findOwnDraft(tx, requestId, userId, true, EDITABLE);
       const [{ total }] = await tx
         .select({ total: count() })
         .from(attachments)
@@ -233,7 +242,7 @@ export const deleteAttachment = authedProcedure
           and(
             eq(attachments.id, input.attachmentId),
             eq(requests.requesterId, ctx.user.id),
-            eq(requests.status, "DRAFT"),
+            inArray(requests.status, EDITABLE),
           ),
         )
         .for("update", { of: requests });

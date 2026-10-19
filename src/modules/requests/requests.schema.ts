@@ -21,6 +21,7 @@ import { id, timestamps } from "@/shared/libs/schema.lib";
 export const requestStatus = pgEnum("request_status", [
   "DRAFT",
   "PENDING",
+  "NEEDS_INFO",
   "APPROVED",
   "REJECTED",
   "CANCELLED",

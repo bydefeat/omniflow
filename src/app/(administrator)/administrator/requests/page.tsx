@@ -11,7 +11,7 @@ export default async function AdminRequestsPage() {
         rows={rows}
         basePath="/administrator/requests"
         showRequester
-        statuses={["PENDING", "APPROVED", "REJECTED", "CANCELLED"]}
+        statuses={["PENDING", "NEEDS_INFO", "APPROVED", "REJECTED", "CANCELLED"]}
       />
     </>
   );

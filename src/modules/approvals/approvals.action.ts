@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, count, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { after } from "next/server";
 import { ZSAError } from "zsa";
 
@@ -20,7 +20,14 @@ import { isMailConfigured, sendMail } from "@/shared/libs/mail.lib";
 import { countPendingApprovals, getActorContext } from "./approvals.query";
 import { approvals } from "./approvals.schema";
 import { type Assignee, computeDueAt, decideAct, nextStep, resolveAssignee, type StepConfig } from "./approvals.service";
-import { approveInput, cancelInput, reassignInput, rejectInput, submitInput } from "./approvals.validation";
+import {
+  approveInput,
+  cancelInput,
+  reassignInput,
+  rejectInput,
+  returnInput,
+  submitInput,
+} from "./approvals.validation";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type NotificationType = (typeof notifications.$inferInsert)["type"];
@@ -358,6 +365,86 @@ export const rejectRequest = authedProcedure
     });
   });
 
+export const returnRequest = authedProcedure
+  .createServerAction()
+  .input(returnInput)
+  .handler(async ({ input, ctx }) => {
+    await inTransaction(async (tx, outbox) => {
+      const { row, onBehalfOfId } = await lockRound(tx, input.approvalId, ctx.user.id);
+      await tx
+        .update(approvals)
+        .set({ result: "RETURNED", actedById: ctx.user.id, onBehalfOfId, comment: input.comment, decidedAt: new Date() })
+        .where(and(eq(approvals.id, row.id), eq(approvals.result, "WAITING")));
+      await tx.update(requests).set({ status: "NEEDS_INFO" }).where(eq(requests.id, row.requestId));
+      await notify(tx, outbox, [row.requesterId], {
+        type: "REQUEST_RETURNED",
+        title: `${row.code} cần bổ sung ở bước ${row.stepName}: ${input.comment}`.slice(0, 200),
+        href: `/workspace/requests/${row.requestId}`,
+      });
+    });
+  });
+
+export const resubmitRequest = authedProcedure
+  .createServerAction()
+  .input(submitInput)
+  .handler(async ({ input, ctx }) => {
+    return inTransaction(async (tx, outbox) => {
+      const [request] = await tx
+        .select({
+          id: requests.id,
+          requesterId: requests.requesterId,
+          status: requests.status,
+          code: requests.code,
+          title: requests.title,
+          formData: requests.formData,
+          snapshot: requests.snapshot,
+        })
+        .from(requests)
+        .where(eq(requests.id, input.requestId))
+        .for("update");
+      if (!request || request.requesterId !== ctx.user.id) {
+        throw new ZSAError("NOT_FOUND", "Không tìm thấy đơn của bạn");
+      }
+      if (request.status !== "NEEDS_INFO") throw new ZSAError("CONFLICT", "Đơn này không ở trạng thái cần bổ sung");
+      const flow = request.snapshot!;
+      const form = buildFormValidator(flow.formSchema).safeParse(request.formData);
+      if (!form.success) {
+        const field = flow.formSchema.find((f) => f.key === form.error.issues[0]?.path[0]);
+        throw new ZSAError(
+          "UNPROCESSABLE_CONTENT",
+          field ? `Biểu mẫu chưa hợp lệ ở trường "${field.label}"` : "Biểu mẫu còn thiếu thông tin bắt buộc",
+        );
+      }
+      if (flow.hasLineItems) {
+        const [{ total }] = await tx
+          .select({ total: count() })
+          .from(requestItems)
+          .where(eq(requestItems.requestId, request.id));
+        if (total === 0) throw new ZSAError("UNPROCESSABLE_CONTENT", "Cần ít nhất một hạng mục chi tiết");
+      }
+
+      const [returned] = await tx
+        .select({ stepOrder: approvals.stepOrder })
+        .from(approvals)
+        .where(and(eq(approvals.requestId, request.id), eq(approvals.result, "RETURNED")))
+        .orderBy(desc(approvals.decidedAt))
+        .limit(1);
+      const step = flow.steps.find((s) => s.stepOrder === returned?.stepOrder) ?? flow.steps[0];
+      const requester = await loadRequester(tx, ctx.user.id);
+      const { assignee, recipients } = await assign(tx, step, requester);
+
+      await tx.update(requests).set({ status: "PENDING" }).where(eq(requests.id, request.id));
+      await openRound(tx, outbox, {
+        request: { id: request.id, code: request.code ?? "", title: request.title, requesterId: request.requesterId },
+        step,
+        assignee,
+        recipients,
+        slaHours: flow.slaHours,
+      });
+      return { id: request.id };
+    });
+  });
+
 export const cancelRequest = authedProcedure
   .createServerAction()
   .input(cancelInput)
@@ -371,8 +458,8 @@ export const cancelRequest = authedProcedure
       if (!request || request.requesterId !== ctx.user.id) {
         throw new ZSAError("NOT_FOUND", "Không tìm thấy đơn của bạn");
       }
-      if (request.status !== "PENDING") {
-        throw new ZSAError("CONFLICT", "Chỉ hủy được đơn đang chờ duyệt");
+      if (request.status !== "PENDING" && request.status !== "NEEDS_INFO") {
+        throw new ZSAError("CONFLICT", "Chỉ hủy được đơn đang chờ duyệt hoặc đang chờ bổ sung");
       }
       const now = new Date();
       const waiting = await tx

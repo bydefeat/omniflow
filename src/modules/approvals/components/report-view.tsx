@@ -7,7 +7,7 @@ import { PageHeader } from "@/shared/components/ui/page-header";
 
 import type { ReportData } from "../approvals.query";
 
-const STATUSES: RequestStatus[] = ["PENDING", "APPROVED", "REJECTED", "CANCELLED"];
+const STATUSES: RequestStatus[] = ["PENDING", "NEEDS_INFO", "APPROVED", "REJECTED", "CANCELLED"];
 
 export function ReportView({ data }: { data: ReportData }) {
   const slaRate = data.sla.decided ? Math.round((data.sla.onTime / data.sla.decided) * 100) : null;

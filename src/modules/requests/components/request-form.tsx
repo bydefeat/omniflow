@@ -19,6 +19,7 @@ type Props = {
   types: ActiveRequestType[];
   draft?: DraftForEdit;
   submitAction: SubmitAction;
+  resubmit?: boolean;
 };
 
 type Values = {
@@ -34,7 +35,7 @@ function firstFieldError(error: unknown) {
   return Object.values(fieldErrors ?? {}).flat().find(Boolean);
 }
 
-export function RequestForm({ types, draft, submitAction }: Props) {
+export function RequestForm({ types, draft, submitAction, resubmit = false }: Props) {
   const router = useRouter();
   const { message, modal } = App.useApp();
   const [form] = Form.useForm<Values>();
@@ -131,7 +132,7 @@ export function RequestForm({ types, draft, submitAction }: Props) {
     const confirmed = await modal.confirm({
       title: "Gửi đơn đi duyệt?",
       content: "Sau khi gửi, bạn không sửa được nội dung đơn, chỉ có thể hủy khi đơn còn đang chờ duyệt.",
-      okText: "Gửi duyệt",
+      okText: resubmit ? "Gửi lại" : "Gửi duyệt",
       cancelText: "Xem lại",
     });
     if (!confirmed) return;
@@ -228,7 +229,7 @@ export function RequestForm({ types, draft, submitAction }: Props) {
               disabled={busy !== null}
               onClick={submit}
             >
-              Gửi duyệt
+              {resubmit ? "Gửi lại" : "Gửi duyệt"}
             </Button>
             <Button
               size="large"
