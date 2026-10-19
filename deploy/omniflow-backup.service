@@ -1,0 +1,11 @@
+[Unit]
+Description=OmniFlow: sao lưu database và tệp đính kèm
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=omniflow
+WorkingDirectory=/opt/omniflow
+Environment=BACKUP_DIR=/var/backups/omniflow
+Environment=BACKUP_KEEP_DAYS=14
+ExecStart=/opt/omniflow/scripts/backup.sh
