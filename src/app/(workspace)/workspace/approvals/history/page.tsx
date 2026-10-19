@@ -1,10 +1,13 @@
-import { getApprovalHistory } from "@/modules/approvals/approvals.query";
+import { forbidden } from "next/navigation";
+
+import { canAccessApprovals, getApprovalHistory } from "@/modules/approvals/approvals.query";
 import { ApprovalHistoryTable } from "@/modules/approvals/components/approval-history-table";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { requireSession } from "@/shared/libs/session.lib";
 
 export default async function ApprovalHistoryPage() {
   const { user } = await requireSession();
+  if (!(await canAccessApprovals(user.id))) forbidden();
   const rows = await getApprovalHistory(user.id);
   return (
     <>

@@ -4,8 +4,11 @@ import { notFound } from "next/navigation";
 import { RequestTypeTabs } from "@/modules/request-types/components/request-type-tabs";
 import { getRequestType } from "@/modules/request-types/request-types.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
+import { ROLES } from "@/shared/constants/role.constant";
+import { requireRole } from "@/shared/libs/session.lib";
 
 export default async function Layout({ children, params }: LayoutProps<"/administrator/request-types/[typeId]">) {
+  await requireRole(ROLES.ADMIN);
   const { typeId } = await params;
   const type = await getRequestType(typeId);
   if (!type) notFound();

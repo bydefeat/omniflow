@@ -7,8 +7,11 @@ import { RequestDetail } from "@/modules/requests/components/request-detail";
 import { getRequestDetail } from "@/modules/requests/requests.query";
 import { listUserOptions } from "@/modules/users/users.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
+import { ROLES } from "@/shared/constants/role.constant";
+import { requireRole } from "@/shared/libs/session.lib";
 
 export default async function AdminRequestPage({ params }: PageProps<"/administrator/requests/[requestId]">) {
+  await requireRole(ROLES.ADMIN);
   const { requestId } = await params;
   const [request, timeline, waitingRound, users] = await Promise.all([
     getRequestDetail(requestId),
