@@ -15,6 +15,13 @@
       "when": 1792348279048,
       "tag": "0001_delegations_no_overlap",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792400716602,
+      "tag": "0002_request_snapshot_and_reassign",
+      "breakpoints": true
     }
   ]
 }

@@ -39,6 +39,8 @@ export const approvals = pgTable(
     comment: varchar({ length: 500 }),
     dueAt: timestamp({ withTimezone: true }).notNull(),
     decidedAt: timestamp({ withTimezone: true }),
+    reassignedById: text().references(() => user.id),
+    reassignedAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },
   (t) => [

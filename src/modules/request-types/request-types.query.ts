@@ -87,8 +87,8 @@ export async function listActiveRequestTypes() {
 
 export type ActiveRequestType = Awaited<ReturnType<typeof listActiveRequestTypes>>[number];
 
-export async function hasPendingRequests(requestTypeId: string) {
-  const [row] = await db.execute<{ pending: boolean }>(
+export async function hasPendingRequests(requestTypeId: string, executor: Pick<typeof db, "execute"> = db) {
+  const [row] = await executor.execute<{ pending: boolean }>(
     sql`select exists(select 1 from requests where request_type_id = ${requestTypeId} and status = 'PENDING') as pending`,
   );
   return Boolean(row?.pending);

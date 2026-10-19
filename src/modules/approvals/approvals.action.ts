@@ -7,17 +7,17 @@ import { getActiveDelegates } from "@/modules/delegations/delegations.query";
 import { notifications } from "@/modules/notifications/notifications.schema";
 import { approvalSteps, requestTypes } from "@/modules/request-types/request-types.schema";
 import { buildFormValidator } from "@/modules/request-types/request-types.validation";
-import { requestCounters, requestItems, requests } from "@/modules/requests/requests.schema";
+import { requestCounters, requestItems, requests, type RequestSnapshot } from "@/modules/requests/requests.schema";
 import { formatRequestCode } from "@/modules/requests/requests.service";
 import { user } from "@/modules/users/users.schema";
-import { FUNCTIONAL_ROLES } from "@/shared/constants/role.constant";
-import { authedProcedure } from "@/shared/libs/action.lib";
+import { FUNCTIONAL_ROLES, ROLES } from "@/shared/constants/role.constant";
+import { authedProcedure, roleProcedure } from "@/shared/libs/action.lib";
 import { db } from "@/shared/libs/db.lib";
 
 import { countPendingApprovals, getActorContext } from "./approvals.query";
 import { approvals } from "./approvals.schema";
 import { type Assignee, computeDueAt, decideAct, nextStep, resolveAssignee, type StepConfig } from "./approvals.service";
-import { approveInput, cancelInput, rejectInput, submitInput } from "./approvals.validation";
+import { approveInput, cancelInput, reassignInput, rejectInput, submitInput } from "./approvals.validation";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type NotificationType = (typeof notifications.$inferInsert)["type"];
@@ -81,10 +81,15 @@ async function notify(
   await tx.insert(notifications).values(unique.map((userId) => ({ userId, ...payload })));
 }
 
+async function withDelegates(userIds: string[], requesterId: string) {
+  const delegates = await getActiveDelegates(userIds);
+  return [...userIds, ...delegates.map((d) => d.delegateId)].filter((id) => id !== requesterId);
+}
+
 async function openRound(
   tx: Tx,
   args: {
-    request: { id: string; code: string; title: string };
+    request: { id: string; code: string; title: string; requesterId: string };
     step: StepConfig;
     assignee: Assignee;
     recipients: string[];
@@ -100,15 +105,14 @@ async function openRound(
     approverRole: args.assignee.approverRole,
     dueAt: computeDueAt(now, args.slaHours),
   });
-  const delegates = await getActiveDelegates(args.recipients);
-  await notify(tx, [...args.recipients, ...delegates.map((d) => d.delegateId)], {
+  await notify(tx, await withDelegates(args.recipients, args.request.requesterId), {
     type: "APPROVAL_NEEDED",
     title: `${args.request.code} chờ bạn duyệt (${args.step.name}): ${args.request.title}`.slice(0, 200),
     href: `/workspace/approvals/${args.request.id}`,
   });
 }
 
-async function loadFlow(tx: Tx, requestTypeId: string) {
+async function snapshotFlow(tx: Tx, requestTypeId: string) {
   const [type] = await tx
     .select({
       isActive: requestTypes.isActive,
@@ -117,7 +121,9 @@ async function loadFlow(tx: Tx, requestTypeId: string) {
       hasLineItems: requestTypes.hasLineItems,
     })
     .from(requestTypes)
-    .where(eq(requestTypes.id, requestTypeId));
+    .where(eq(requestTypes.id, requestTypeId))
+    .for("share");
+  if (!type?.isActive) throw new ZSAError("PRECONDITION_FAILED", "Loại đơn đã ngừng sử dụng");
   const steps = await tx
     .select({
       stepOrder: approvalSteps.stepOrder,
@@ -128,7 +134,13 @@ async function loadFlow(tx: Tx, requestTypeId: string) {
     .from(approvalSteps)
     .where(eq(approvalSteps.requestTypeId, requestTypeId))
     .orderBy(asc(approvalSteps.stepOrder));
-  return { type, steps };
+  const snapshot: RequestSnapshot = {
+    formSchema: type.formSchema,
+    hasLineItems: type.hasLineItems,
+    slaHours: type.slaHours,
+    steps,
+  };
+  return snapshot;
 }
 
 async function loadRequester(tx: Tx, requesterId: string) {
@@ -161,15 +173,15 @@ export const submitRequest = authedProcedure
       }
       if (request.status !== "DRAFT") throw new ZSAError("CONFLICT", "Đơn này đã được gửi");
 
-      const { type, steps } = await loadFlow(tx, request.requestTypeId);
-      if (!type?.isActive) throw new ZSAError("PRECONDITION_FAILED", "Loại đơn đã ngừng sử dụng");
+      const flow = await snapshotFlow(tx, request.requestTypeId);
+      const { steps } = flow;
       if (steps.length === 0) {
         throw new ZSAError("PRECONDITION_FAILED", "Loại đơn chưa được cấu hình bước duyệt");
       }
-      if (!buildFormValidator(type.formSchema).safeParse(request.formData).success) {
+      if (!buildFormValidator(flow.formSchema).safeParse(request.formData).success) {
         throw new ZSAError("UNPROCESSABLE_CONTENT", "Biểu mẫu còn thiếu thông tin bắt buộc");
       }
-      if (type.hasLineItems) {
+      if (flow.hasLineItems) {
         const [{ total }] = await tx
           .select({ total: count() })
           .from(requestItems)
@@ -194,21 +206,38 @@ export const submitRequest = authedProcedure
 
       await tx
         .update(requests)
-        .set({ status: "PENDING", code, submittedAt: new Date(), departmentId: requester.departmentId })
+        .set({ status: "PENDING", code, submittedAt: new Date(), departmentId: requester.departmentId, snapshot: flow })
         .where(eq(requests.id, request.id));
       await openRound(tx, {
-        request: { id: request.id, code, title: request.title },
+        request: { id: request.id, code, title: request.title, requesterId: request.requesterId },
         step: first,
         assignee,
         recipients,
-        slaHours: type.slaHours,
+        slaHours: flow.slaHours,
       });
       return { id: request.id, code };
     });
   });
 
-async function lockRound(tx: Tx, approvalId: string, actorId: string) {
-  const [row] = await tx
+async function lockRequestAndRound(tx: Tx, approvalId: string) {
+  const [target] = await tx
+    .select({ requestId: approvals.requestId })
+    .from(approvals)
+    .where(eq(approvals.id, approvalId));
+  if (!target) throw new ZSAError("NOT_FOUND", "Không tìm thấy lượt duyệt");
+  const [request] = await tx
+    .select({
+      requestId: requests.id,
+      requesterId: requests.requesterId,
+      requestStatus: requests.status,
+      snapshot: requests.snapshot,
+      code: requests.code,
+      title: requests.title,
+    })
+    .from(requests)
+    .where(eq(requests.id, target.requestId))
+    .for("update");
+  const [round] = await tx
     .select({
       id: approvals.id,
       stepOrder: approvals.stepOrder,
@@ -216,18 +245,17 @@ async function lockRound(tx: Tx, approvalId: string, actorId: string) {
       result: approvals.result,
       approverId: approvals.approverId,
       approverRole: approvals.approverRole,
-      requestId: requests.id,
-      requesterId: requests.requesterId,
-      requestStatus: requests.status,
-      requestTypeId: requests.requestTypeId,
-      code: requests.code,
-      title: requests.title,
     })
     .from(approvals)
-    .innerJoin(requests, eq(requests.id, approvals.requestId))
     .where(eq(approvals.id, approvalId))
     .for("update");
+  const row = request && round ? { ...request, ...round } : null;
   if (!row) throw new ZSAError("NOT_FOUND", "Không tìm thấy lượt duyệt");
+  return row;
+}
+
+async function lockRound(tx: Tx, approvalId: string, actorId: string) {
+  const row = await lockRequestAndRound(tx, approvalId);
   if (row.requestStatus !== "PENDING") throw new ZSAError("CONFLICT", "Đơn không còn ở trạng thái chờ duyệt");
 
   const actor = await getActorContext(actorId);
@@ -252,14 +280,14 @@ export const approveRequest = authedProcedure
         .set({ result: "APPROVED", actedById: ctx.user.id, onBehalfOfId, comment: input.comment, decidedAt: now })
         .where(and(eq(approvals.id, row.id), eq(approvals.result, "WAITING")));
 
-      const { type, steps } = await loadFlow(tx, row.requestTypeId);
-      const next = nextStep(steps, row.stepOrder);
-      const request = { id: row.requestId, code: row.code ?? "", title: row.title };
+      const flow = row.snapshot!;
+      const next = nextStep(flow.steps, row.stepOrder);
+      const request = { id: row.requestId, code: row.code ?? "", title: row.title, requesterId: row.requesterId };
 
       if (next) {
         const requester = await loadRequester(tx, row.requesterId);
         const { assignee, recipients } = await assign(tx, next, requester);
-        await openRound(tx, { request, step: next, assignee, recipients, slaHours: type?.slaHours ?? 24 });
+        await openRound(tx, { request, step: next, assignee, recipients, slaHours: flow.slaHours });
         return { completed: false };
       }
 
@@ -314,17 +342,50 @@ export const cancelRequest = authedProcedure
         .update(approvals)
         .set({ result: "CANCELLED", decidedAt: now })
         .where(and(eq(approvals.requestId, request.id), eq(approvals.result, "WAITING")))
-        .returning({ approverId: approvals.approverId });
+        .returning({ approverId: approvals.approverId, approverRole: approvals.approverRole });
       await tx.update(requests).set({ status: "CANCELLED", completedAt: now }).where(eq(requests.id, request.id));
+      const assignees = (
+        await Promise.all(
+          waiting.map((w) => (w.approverId ? [w.approverId] : findRoleHolders(tx, w.approverRole!, request.requesterId))),
+        )
+      ).flat();
       await notify(
         tx,
-        waiting.flatMap((w) => (w.approverId ? [w.approverId] : [])),
+        await withDelegates(assignees, request.requesterId),
         {
           type: "REQUEST_CANCELLED",
           title: `${request.code} đã bị người đề xuất hủy: ${request.title}`.slice(0, 200),
           href: `/workspace/approvals/${request.id}`,
         },
       );
+    });
+  });
+
+export const reassignApproval = roleProcedure(ROLES.ADMIN)
+  .createServerAction()
+  .input(reassignInput)
+  .handler(async ({ input, ctx }) => {
+    await db.transaction(async (tx) => {
+      const row = await lockRequestAndRound(tx, input.approvalId);
+      if (row.requestStatus !== "PENDING" || row.result !== "WAITING") {
+        throw new ZSAError("CONFLICT", "Lượt duyệt này đã được xử lý");
+      }
+      if (input.approverId === row.requesterId) {
+        throw new ZSAError("UNPROCESSABLE_CONTENT", "Không thể giao cho chính người làm đơn");
+      }
+      const [assignee] = await tx.select({ banned: user.banned }).from(user).where(eq(user.id, input.approverId));
+      if (!assignee || assignee.banned) {
+        throw new ZSAError("UNPROCESSABLE_CONTENT", "Người được chọn không tồn tại hoặc đã bị khóa");
+      }
+      await tx
+        .update(approvals)
+        .set({ approverId: input.approverId, approverRole: null, reassignedById: ctx.user.id, reassignedAt: new Date() })
+        .where(eq(approvals.id, row.id));
+      await notify(tx, await withDelegates([input.approverId], row.requesterId), {
+        type: "APPROVAL_NEEDED",
+        title: `${row.code} được giao cho bạn duyệt (${row.stepName}): ${row.title}`.slice(0, 200),
+        href: `/workspace/approvals/${row.requestId}`,
+      });
     });
   });
 

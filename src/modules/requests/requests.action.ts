@@ -72,11 +72,12 @@ async function replaceItems(tx: Tx, requestId: string, items: LineItemInput[], h
     .where(eq(requests.id, requestId));
 }
 
-async function findOwnDraft(requestId: string, userId: string) {
-  const [request] = await db
+async function findOwnDraft(executor: Tx | typeof db, requestId: string, userId: string, lock = false) {
+  const query = executor
     .select({ id: requests.id, requestTypeId: requests.requestTypeId })
     .from(requests)
     .where(and(eq(requests.id, requestId), eq(requests.requesterId, userId), eq(requests.status, "DRAFT")));
+  const [request] = lock ? await query.for("update") : await query;
   if (!request) throw new ZSAError("NOT_FOUND", "Không tìm thấy đơn nháp của bạn");
   return request;
 }
@@ -109,30 +110,31 @@ export const updateDraft = authedProcedure
   .createServerAction()
   .input(requestDraftUpdateInput)
   .handler(async ({ input, ctx }) => {
-    const draft = await findOwnDraft(input.id, ctx.user.id);
-    const type = await loadActiveType(draft.requestTypeId);
+    const { requestTypeId } = await findOwnDraft(db, input.id, ctx.user.id);
+    const type = await loadActiveType(requestTypeId);
     const formData = parseDraftFormData(type, input.formData);
 
     await db.transaction(async (tx) => {
-      await tx
-        .update(requests)
-        .set({ title: input.title, reason: input.reason, formData })
-        .where(and(eq(requests.id, draft.id), eq(requests.status, "DRAFT")));
+      const draft = await findOwnDraft(tx, input.id, ctx.user.id, true);
+      await tx.update(requests).set({ title: input.title, reason: input.reason, formData }).where(eq(requests.id, draft.id));
       await replaceItems(tx, draft.id, input.items, type.hasLineItems);
     });
-    return { id: draft.id };
+    return { id: input.id };
   });
 
 export const deleteDraft = authedProcedure
   .createServerAction()
   .input(requestIdInput)
   .handler(async ({ input, ctx }) => {
-    const draft = await findOwnDraft(input.requestId, ctx.user.id);
-    const files = await db
-      .select({ storageKey: attachments.storageKey })
-      .from(attachments)
-      .where(eq(attachments.requestId, draft.id));
-    await db.delete(requests).where(and(eq(requests.id, draft.id), eq(requests.status, "DRAFT")));
+    const files = await db.transaction(async (tx) => {
+      const draft = await findOwnDraft(tx, input.requestId, ctx.user.id, true);
+      const stored = await tx
+        .select({ storageKey: attachments.storageKey })
+        .from(attachments)
+        .where(eq(attachments.requestId, draft.id));
+      await tx.delete(requests).where(eq(requests.id, draft.id));
+      return stored;
+    });
     await Promise.all(files.map((f) => deleteStoredFile(f.storageKey)));
   });
 
@@ -163,7 +165,6 @@ export async function uploadAttachment(
 type AttachmentResult = Awaited<ReturnType<typeof saveAttachment>>;
 
 async function saveAttachment(requestId: string, file: File, userId: string) {
-  const draft = await findOwnDraft(requestId, userId);
   if (file.size === 0) throw new ZSAError("UNPROCESSABLE_CONTENT", "Tệp rỗng");
   if (file.size > ATTACHMENT_MAX_BYTES) {
     throw new ZSAError("PAYLOAD_TOO_LARGE", "Tệp vượt quá 10 MB");
@@ -171,51 +172,64 @@ async function saveAttachment(requestId: string, file: File, userId: string) {
   if (!ATTACHMENT_MIME_TYPES.includes(file.type)) {
     throw new ZSAError("UNPROCESSABLE_CONTENT", "Chỉ nhận PDF, ảnh, Word hoặc Excel");
   }
-  const [{ total }] = await db
-    .select({ total: count() })
-    .from(attachments)
-    .where(eq(attachments.requestId, draft.id));
-  if (total >= ATTACHMENT_MAX_COUNT) {
-    throw new ZSAError("PRECONDITION_FAILED", `Tối đa ${ATTACHMENT_MAX_COUNT} tệp mỗi đơn`);
-  }
+  await findOwnDraft(db, requestId, userId);
 
   const storageKey = await saveFile(new Uint8Array(await file.arrayBuffer()));
-  const [created] = await db
-    .insert(attachments)
-    .values({
-      requestId: draft.id,
-      fileName: file.name.slice(0, 255),
-      storageKey,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      uploadedById: userId,
-    })
-    .returning({
-      id: attachments.id,
-      fileName: attachments.fileName,
-      mimeType: attachments.mimeType,
-      sizeBytes: attachments.sizeBytes,
-      uploadedAt: attachments.uploadedAt,
+  try {
+    return await db.transaction(async (tx) => {
+      const draft = await findOwnDraft(tx, requestId, userId, true);
+      const [{ total }] = await tx
+        .select({ total: count() })
+        .from(attachments)
+        .where(eq(attachments.requestId, draft.id));
+      if (total >= ATTACHMENT_MAX_COUNT) {
+        throw new ZSAError("PRECONDITION_FAILED", `Tối đa ${ATTACHMENT_MAX_COUNT} tệp mỗi đơn`);
+      }
+      const [created] = await tx
+        .insert(attachments)
+        .values({
+          requestId: draft.id,
+          fileName: file.name.slice(0, 255),
+          storageKey,
+          mimeType: file.type,
+          sizeBytes: file.size,
+          uploadedById: userId,
+        })
+        .returning({
+          id: attachments.id,
+          fileName: attachments.fileName,
+          mimeType: attachments.mimeType,
+          sizeBytes: attachments.sizeBytes,
+          uploadedAt: attachments.uploadedAt,
+        });
+      return created;
     });
-  return created;
+  } catch (error) {
+    await deleteStoredFile(storageKey);
+    throw error;
+  }
 }
 
 export const deleteAttachment = authedProcedure
   .createServerAction()
   .input(attachmentIdInput)
   .handler(async ({ input, ctx }) => {
-    const [row] = await db
-      .select({ id: attachments.id, storageKey: attachments.storageKey })
-      .from(attachments)
-      .innerJoin(requests, eq(requests.id, attachments.requestId))
-      .where(
-        and(
-          eq(attachments.id, input.attachmentId),
-          eq(requests.requesterId, ctx.user.id),
-          eq(requests.status, "DRAFT"),
-        ),
-      );
-    if (!row) throw new ZSAError("NOT_FOUND", "Không tìm thấy tệp");
-    await db.delete(attachments).where(eq(attachments.id, row.id));
-    await deleteStoredFile(row.storageKey);
+    const storageKey = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({ id: attachments.id, storageKey: attachments.storageKey })
+        .from(attachments)
+        .innerJoin(requests, eq(requests.id, attachments.requestId))
+        .where(
+          and(
+            eq(attachments.id, input.attachmentId),
+            eq(requests.requesterId, ctx.user.id),
+            eq(requests.status, "DRAFT"),
+          ),
+        )
+        .for("update", { of: requests });
+      if (!row) throw new ZSAError("NOT_FOUND", "Không tìm thấy tệp");
+      await tx.delete(attachments).where(eq(attachments.id, row.id));
+      return row.storageKey;
+    });
+    await deleteStoredFile(storageKey);
   });
