@@ -14,6 +14,7 @@ import {
 
 import { departments } from "@/modules/departments/departments.schema";
 import { requestTypes } from "@/modules/request-types/request-types.schema";
+import type { FormField } from "@/modules/request-types/request-types.validation";
 import { user } from "@/modules/users/users.schema";
 import { id, timestamps } from "@/shared/libs/schema.lib";
 
@@ -24,6 +25,13 @@ export const requestStatus = pgEnum("request_status", [
   "REJECTED",
   "CANCELLED",
 ]);
+
+export type RequestSnapshot = {
+  formSchema: FormField[];
+  hasLineItems: boolean;
+  slaHours: number;
+  steps: { stepOrder: number; name: string; approverType: "MANAGER" | "ROLE"; approverRole: string | null }[];
+};
 
 export const requests = pgTable(
   "requests",
@@ -41,6 +49,7 @@ export const requests = pgTable(
     reason: text().notNull(),
     formData: jsonb().$type<Record<string, unknown>>().notNull().default({}),
     totalAmount: numeric({ precision: 18, scale: 2 }),
+    snapshot: jsonb().$type<RequestSnapshot>(),
     status: requestStatus().notNull().default("DRAFT"),
     submittedAt: timestamp({ withTimezone: true }),
     completedAt: timestamp({ withTimezone: true }),
@@ -53,6 +62,7 @@ export const requests = pgTable(
       "requests_code_after_submit",
       sql`(${t.status} = 'DRAFT') or (${t.code} is not null and ${t.submittedAt} is not null)`,
     ),
+    check("requests_snapshot_after_submit", sql`(${t.status} = 'DRAFT') = (${t.snapshot} is null)`),
   ],
 );
 

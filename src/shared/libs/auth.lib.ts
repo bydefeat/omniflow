@@ -8,6 +8,7 @@ import * as schema from "@/modules/schema";
 import { ROLES } from "@/shared/constants/role.constant";
 import { db } from "@/shared/libs/db.lib";
 import { env } from "@/shared/libs/env.lib";
+import { isMailConfigured, sendMail } from "@/shared/libs/mail.lib";
 
 export const auth = betterAuth({
   secret: env.DEFEAT_BETTER_AUTH_SESSION_SIGNING_SECRET_KEY,
@@ -20,7 +21,17 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
-      console.info(`[reset-password] ${user.email}: ${url}`);
+      if (isMailConfigured) {
+        void sendMail({
+          to: user.email,
+          subject: "Đặt lại mật khẩu OmniFlow",
+          text: `Chào ${user.name},\n\nMở liên kết sau để đặt lại mật khẩu (hết hạn sau 1 giờ):\n${url}\n\nNếu bạn không yêu cầu, hãy bỏ qua email này.`,
+        }).catch((error) => console.error("[reset-password] gửi email thất bại", error));
+      } else if (process.env.NODE_ENV !== "production") {
+        console.info(`[reset-password] ${user.email}: ${url}`);
+      } else {
+        console.warn("[reset-password] SMTP chưa được cấu hình, không gửi được liên kết đặt lại mật khẩu");
+      }
     },
   },
   user: {

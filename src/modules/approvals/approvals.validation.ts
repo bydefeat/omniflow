@@ -18,3 +18,8 @@ export const rejectInput = z.object({
 export const submitInput = z.object({ requestId: z.string().min(1) });
 
 export const cancelInput = z.object({ requestId: z.string().min(1) });
+
+export const reassignInput = z.object({
+  approvalId: z.string().min(1),
+  approverId: z.string().min(1, "Vui lòng chọn người duyệt"),
+});

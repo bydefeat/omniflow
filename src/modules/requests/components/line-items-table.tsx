@@ -6,6 +6,8 @@ import { Button, Input, InputNumber, theme } from "antd";
 
 import { formatMoney } from "@/shared/libs/format.lib";
 
+import { lineAmountCents, MAX_AMOUNT, MAX_QUANTITY } from "../requests.validation";
+
 export type LineItemValue = {
   key: string;
   name: string;
@@ -17,7 +19,35 @@ export type LineItemValue = {
 const features = tableFeatures({});
 
 export const amountOf = (item: Pick<LineItemValue, "quantity" | "unitPrice">) =>
-  Math.round((item.quantity ?? 0) * (item.unitPrice ?? 0) * 100) / 100;
+  lineAmountCents(item.quantity ?? 0, item.unitPrice ?? 0) / 100;
+
+export const isBlankLineItem = (item: LineItemValue) => !item.name.trim() && !item.unit.trim() && item.unitPrice == null;
+
+export function lineItemProblem(item: LineItemValue) {
+  const missing = [
+    !item.name.trim() && "tên",
+    !item.unit.trim() && "đơn vị tính",
+    !item.quantity && "số lượng",
+    item.unitPrice == null && "đơn giá",
+  ].filter(Boolean);
+  return missing.length > 0 ? `thiếu ${missing.join(", ")}` : null;
+}
+
+function formatVnd(value: number | string | undefined, info: { userTyping: boolean; input: string }) {
+  if (info.userTyping) return info.input;
+  if (value == null || value === "") return "";
+  const [integer, decimals] = String(value).split(".");
+  return integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (decimals ? `,${decimals}` : "");
+}
+
+const VND_PATTERN = /^(\d{1,3}(\.\d{3})*|\d+)(,\d{0,2})?$/;
+
+function parseVnd(text: string | undefined) {
+  const value = (text ?? "").trim();
+  if (!value) return "";
+  if (!VND_PATTERN.test(value)) return "NaN";
+  return value.replace(/\./g, "").replace(",", ".");
+}
 
 export const newLineItem = (): LineItemValue => ({
   key: crypto.randomUUID(),
@@ -71,7 +101,10 @@ export function LineItemsTable({ value = [], onChange }: Props) {
         <InputNumber
           className="!w-full"
           min={0.01}
+          max={MAX_QUANTITY}
+          precision={2}
           step={1}
+          decimalSeparator=","
           value={row.original.quantity}
           onChange={(quantity) => update(row.original.key, { quantity })}
         />
@@ -84,10 +117,11 @@ export function LineItemsTable({ value = [], onChange }: Props) {
         <InputNumber<number>
           className="!w-full"
           min={0}
+          max={MAX_AMOUNT}
           step={1000}
           value={row.original.unitPrice}
-          formatter={(v) => (v == null ? "" : `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, "."))}
-          parser={(v) => Number((v ?? "").replace(/\./g, ""))}
+          formatter={formatVnd}
+          parser={parseVnd as unknown as (text: string | undefined) => number}
           onChange={(unitPrice) => update(row.original.key, { unitPrice })}
         />
       ),

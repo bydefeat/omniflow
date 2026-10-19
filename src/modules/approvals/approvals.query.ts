@@ -123,10 +123,23 @@ export type ApprovalHistoryRow = Awaited<ReturnType<typeof getApprovalHistory>>[
 
 const approver = alias(user, "approver");
 const actedBy = alias(user, "acted_by");
+const reassignedBy = alias(user, "reassigned_by");
+
+const hasNoActiveAssignee = sql<boolean>`(
+  (${approvals.approverId} is not null and not exists (
+    select 1 from "user" u where u.id = ${approvals.approverId} and u.banned is not true
+  ))
+  or (${approvals.approverRole} is not null and not exists (
+    select 1 from "user" u
+    where u.banned is not true
+      and u.id <> ${requests.requesterId}
+      and (',' || coalesce(u.role, '') || ',') like '%,' || ${approvals.approverRole} || ',%'
+  ))
+)`;
 
 export async function getApprovalTimeline(requestId: string) {
   const [request] = await db
-    .select({ status: requests.status, requestTypeId: requests.requestTypeId })
+    .select({ status: requests.status, requestTypeId: requests.requestTypeId, snapshot: requests.snapshot })
     .from(requests)
     .where(eq(requests.id, requestId));
   if (!request) return { rounds: [], upcoming: [] };
@@ -142,6 +155,8 @@ export async function getApprovalTimeline(requestId: string) {
       approverRole: approvals.approverRole,
       actedByName: actedBy.name,
       onBehalfOfName: onBehalfOf.name,
+      reassignedByName: reassignedBy.name,
+      reassignedAt: approvals.reassignedAt,
       createdAt: approvals.createdAt,
       dueAt: approvals.dueAt,
       decidedAt: approvals.decidedAt,
@@ -151,13 +166,14 @@ export async function getApprovalTimeline(requestId: string) {
     .leftJoin(approver, eq(approver.id, approvals.approverId))
     .leftJoin(actedBy, eq(actedBy.id, approvals.actedById))
     .leftJoin(onBehalfOf, eq(onBehalfOf.id, approvals.onBehalfOfId))
+    .leftJoin(reassignedBy, eq(reassignedBy.id, approvals.reassignedById))
     .where(eq(approvals.requestId, requestId))
     .orderBy(asc(approvals.stepOrder));
 
   const lastOrder = rounds.at(-1)?.stepOrder ?? 0;
   const upcoming =
     request.status === "DRAFT" || request.status === "PENDING"
-      ? (await getApprovalSteps(request.requestTypeId))
+      ? (request.snapshot?.steps ?? (await getApprovalSteps(request.requestTypeId)))
           .filter((s) => s.stepOrder > lastOrder)
           .map((s) => ({ stepOrder: s.stepOrder, name: s.name, approverRole: s.approverRole }))
       : [];
@@ -207,8 +223,45 @@ export async function canViewRequest(requestId: string, userId: string) {
   return Boolean(involved);
 }
 
+export async function getWaitingRound(requestId: string) {
+  const [row] = await db
+    .select({
+      approvalId: approvals.id,
+      stepName: approvals.stepName,
+      requesterId: requests.requesterId,
+      unassignable: hasNoActiveAssignee,
+    })
+    .from(approvals)
+    .innerJoin(requests, eq(requests.id, approvals.requestId))
+    .where(and(eq(approvals.requestId, requestId), eq(approvals.result, "WAITING"), eq(requests.status, "PENDING")));
+  return row ?? null;
+}
+
+export type WaitingRound = NonNullable<Awaited<ReturnType<typeof getWaitingRound>>>;
+
+export async function listUnassignableApprovals() {
+  return db
+    .select({
+      approvalId: approvals.id,
+      requestId: requests.id,
+      code: requests.code,
+      title: requests.title,
+      stepName: approvals.stepName,
+      approverName: approver.name,
+      approverRole: approvals.approverRole,
+      dueAt: approvals.dueAt,
+    })
+    .from(approvals)
+    .innerJoin(requests, eq(requests.id, approvals.requestId))
+    .leftJoin(approver, eq(approver.id, approvals.approverId))
+    .where(and(eq(approvals.result, "WAITING"), eq(requests.status, "PENDING"), hasNoActiveAssignee))
+    .orderBy(asc(approvals.dueAt));
+}
+
+export type UnassignableApprovalRow = Awaited<ReturnType<typeof listUnassignableApprovals>>[number];
+
 export async function getAdminOverview() {
-  const [[pending], [overdue], byApprover, byRole] = await Promise.all([
+  const [[pending], [overdue], byApprover, byRole, unassignable] = await Promise.all([
     db.select({ total: count() }).from(requests).where(eq(requests.status, "PENDING")),
     db
       .select({ total: count() })
@@ -228,8 +281,9 @@ export async function getAdminOverview() {
       .where(and(eq(approvals.result, "WAITING"), isNotNull(approvals.approverRole)))
       .groupBy(approvals.approverRole)
       .orderBy(desc(count())),
+    listUnassignableApprovals(),
   ]);
-  return { pending: pending.total, overdue: overdue.total, byApprover, byRole };
+  return { pending: pending.total, overdue: overdue.total, byApprover, byRole, unassignable };
 }
 
 export async function getReportData() {

@@ -75,8 +75,9 @@ export async function getRequestDetail(requestId: string) {
       departmentName: departments.name,
       requestTypeId: requests.requestTypeId,
       typeName: requestTypes.name,
-      formSchema: requestTypes.formSchema,
-      hasLineItems: requestTypes.hasLineItems,
+      typeFormSchema: requestTypes.formSchema,
+      typeHasLineItems: requestTypes.hasLineItems,
+      snapshot: requests.snapshot,
     })
     .from(requests)
     .innerJoin(user, eq(user.id, requests.requesterId))
@@ -84,7 +85,13 @@ export async function getRequestDetail(requestId: string) {
     .leftJoin(departments, eq(departments.id, requests.departmentId))
     .where(eq(requests.id, requestId));
   if (!request) return null;
-  return { ...request, ...(await loadChildren(requestId)) };
+  const { typeFormSchema, typeHasLineItems, snapshot, ...rest } = request;
+  return {
+    ...rest,
+    formSchema: snapshot?.formSchema ?? typeFormSchema,
+    hasLineItems: snapshot?.hasLineItems ?? typeHasLineItems,
+    ...(await loadChildren(requestId)),
+  };
 }
 
 export type RequestDetail = NonNullable<Awaited<ReturnType<typeof getRequestDetail>>>;

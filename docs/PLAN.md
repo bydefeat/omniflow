@@ -19,6 +19,7 @@ npm run db:seed                 # phòng ban Ban Giám đốc + tài khoản adm
 npm run db:seed -- --demo       # thêm 5 tài khoản demo (mật khẩu Omniflow@123) và 3 loại đơn
 npm run dev
 npm test                        # unit test quy trình duyệt
+npm run build && npm run test:e2e   # e2e Playwright trên production build, cần DB vừa seed --demo
 ```
 
 Tài khoản demo: `ceo@`, `cfo@`, `truongphong.it@`, `ketoan@`, `nhanvien.it@` (đuôi `omniflow.local`). Quan hệ quản lý: nhân viên IT → trưởng phòng IT → CEO; kế toán → CFO → CEO.
@@ -35,7 +36,7 @@ Các chỗ thiếu trong `docs.md` (xem `ARCHITECTURE.md` mục 6) tạm chốt 
 | G4 | Hủy được khi `DRAFT` hoặc `PENDING` (kể cả đã có cấp duyệt) |
 | G5 | Ủy quyền có người ủy quyền và người được ủy quyền; xét lúc đọc/duyệt. Một người không có hai ủy quyền `ACTIVE` chồng thời gian |
 | G6 | Khóa tài khoản (`LOCKED`) dùng `banned` của plugin `admin` better-auth, không thêm cột `status` riêng |
-| G7 | Thông báo chỉ trong ứng dụng; email để sau |
+| G7 | Thông báo duyệt chỉ trong ứng dụng. Email chỉ dùng cho đặt lại mật khẩu, gửi qua SMTP khi có `DEFEAT_SMTP_CONNECTION_URL` |
 | G8 | Tệp đính kèm lưu ổ đĩa local (`uploads/`, đã gitignore); tối đa 10 MB/tệp, chỉ PDF, ảnh, Excel, Word |
 | G9 | SLA chỉ để báo cáo và tô màu quá hạn; không tự động chuyển cấp hay nhắc nhở |
 
@@ -96,7 +97,7 @@ Mật khẩu (MatKhau) nằm ở bảng `account` của better-auth. Index: `dep
 | `approverType` | enum `MANAGER`, `ROLE` | not null | KieuNguoiDuyet |
 | `approverRole` | varchar(30) | check: `ROLE` ⇒ not null | G2 |
 
-Không cho sửa hay xóa bước của loại đơn đang có đơn `PENDING`. Lượt duyệt lưu bản chụp tên bước nên sửa sau đó không làm sai lịch sử.
+Không cho sửa hay xóa bước của loại đơn đang có đơn `PENDING` (kiểm tra trong cùng transaction, khóa dòng loại đơn). Lượt duyệt lưu bản chụp tên bước, đơn lưu bản chụp cả quy trình (`requests.snapshot`) nên sửa sau đó không làm sai lịch sử.
 
 ### `requests`, `request_items`, `attachments`, `request_counters` — module `requests`
 
@@ -116,6 +117,7 @@ Không cho sửa hay xóa bước của loại đơn đang có đơn `PENDING`. 
 | `status` | enum (G3) | mặc định `DRAFT` | TrangThai |
 | `submittedAt` | timestamptz | | NgayTao (thời điểm gửi) |
 | `completedAt` | timestamptz | | lúc duyệt xong / từ chối / hủy |
+| `snapshot` | jsonb | null khi và chỉ khi `DRAFT` | bản chụp `formSchema`, `hasLineItems`, `slaHours`, các bước duyệt lúc gửi |
 
 Index: (`requesterId`, `status`), (`status`, `submittedAt`).
 
@@ -163,6 +165,8 @@ Index: (`requesterId`, `status`), (`status`, `submittedAt`).
 | `comment` | varchar(500) | check: `REJECTED` ⇒ not null | YKienPhanHoi |
 | `dueAt` | timestamptz | not null | lúc tạo + `slaHours` |
 | `decidedAt` | timestamptz | | NgayQuyetDinh |
+
+Thêm `reassignedById` (FK → user) và `reassignedAt`: admin giao lại lượt đang `WAITING` cho người khác.
 
 Index: (`approverId`, `result`), (`approverRole`, `result`). Lượt đã xử lý không bao giờ bị sửa hay xóa (audit trail).
 
@@ -229,7 +233,7 @@ Index: (`userId`, `readAt`).
 
 **Ghi chú:**
 - Với Cache Components, `redirect()`/`forbidden()` chạy trong phần stream nên mã HTTP vẫn là 200; nội dung trả về là trang 403 hoặc lệnh chuyển hướng, không lộ dữ liệu.
-- Chưa có email (G7): `sendResetPassword` chỉ in liên kết đặt lại ra log server. Khi có dịch vụ email thì thay ở `auth.lib.ts`.
+- Email (G7): `sendResetPassword` gửi qua `mail.lib.ts` (nodemailer) khi có `DEFEAT_SMTP_CONNECTION_URL`. Không có SMTP: ngoài production thì in liên kết ra log; ở production không in token, trang quên mật khẩu hướng dẫn liên hệ quản trị viên.
 - `roleProcedure` chưa thử qua action thật; sẽ thử khi có action đầu tiên ở giai đoạn 4.
 - Kiểu `role` của better-auth chỉ nhận `user`/`admin`, nên khi tạo người dùng truyền role qua `data.role` (xem `seed.ts`).
 - Lỗi build hay gặp: icon `@ant-design/icons` chỉ dùng được trong component có `"use client"`; không dùng `new Date()`/`Math.random()` lúc render ở server component.
@@ -300,7 +304,7 @@ Index: (`userId`, `readAt`).
 | Tĩnh | `tsc`, `lint`, 0 comment, `drizzle-kit generate` không lệch schema, `drizzle-kit check` sạch |
 | Schema better-auth | So với `@better-auth/cli generate`: đủ cột, đúng tên; khác biệt có chủ đích (`timestamptz`, `employee_code` varchar unique, khóa ngoại) |
 | Kiến trúc | `shared` không import `modules` (trừ `db.lib`, `auth.lib`); không module nào import `action`/`components` của module khác; mọi cạnh import đi đúng chiều mũi tên |
-| Bảo mật | 27/27 server action có kiểm quyền (9 `adminProcedure`, 17 `authedProcedure`, 1 `getSession()`); mọi route portal chưa đăng nhập → 307 về sign-in, `api/files` → 401; không có `dangerouslySetInnerHTML`/`eval`/`any`; `.env` không vào git; `npm audit --omit=dev`: 0 lỗ hổng |
+| Bảo mật | 27/27 server action có kiểm quyền (12 `adminProcedure`, 14 `authedProcedure`, 1 `getSession()`; nay là 28/28 sau khi thêm `reassignApproval`); mọi route portal chưa đăng nhập → 307 về sign-in, `api/files` → 401; không có `dangerouslySetInnerHTML`/`eval`/`any`; `.env` không vào git; `npm audit --omit=dev`: 0 lỗ hổng |
 
 Rà soát code lần này tìm và sửa thêm 3 lỗi: ngày giờ định dạng theo múi giờ của server (lệch 7 giờ và lỗi hydration khi deploy lên server UTC) → cố định `Asia/Ho_Chi_Minh`; `DndContext` sinh id khác nhau giữa server và trình duyệt → truyền `id` từ `useId()`; bản nháp thuộc loại đơn đã tắt mở ra trống trơn → hiện cảnh báo và chỉ cho xóa nháp.
 
@@ -314,7 +318,21 @@ Rà soát code lần này tìm và sửa thêm 3 lỗi: ngày giờ định dạ
 
 Kiểm thử đầu-cuối tìm ra và đã sửa 3 lỗi: zsa `type: "formData"` hỏng với zod 4; `Layout.Content` dùng trong server component thành `undefined` (mọi trang phải render lại ở client); `updateUser` với id không tồn tại báo thành công.
 
-**Chưa kiểm:** giao diện trên trình duyệt thật (bố cục, kéo thả, hiển thị trên điện thoại). Các script kiểm thử nằm ngoài repo; muốn giữ lại thì chuyển vào `scripts/e2e/`.
+**Các script trên nằm ngoài repo.** Bộ e2e trong repo ở mục 4.1.
+
+### 4.1. E2E trong repo (`scripts/e2e/`, Playwright)
+
+Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` → `npm run test:e2e` (tự `npm start` nếu cổng 3000 trống). Trình duyệt có sẵn thì truyền `E2E_CHROMIUM_PATH`. 23/23 qua trên DB dựng lại từ đầu:
+
+| File | Nội dung |
+|---|---|
+| `auth.spec.ts` | Chưa đăng nhập → sign-in kèm `callbackURL`; `callbackURL=/%09/evil` không đưa ra ngoài; `callbackURL` hợp lệ được giữ; không có SMTP thì trang quên mật khẩu hướng dẫn liên hệ admin; admin đặt mật khẩu → phiên cũ bị đăng xuất |
+| `request-flow.spec.ts` | Trên trình duyệt: lưu nháp khi dòng hạng mục trống, số lượng `2,5` × `1.500.000` = 3.750.000 khớp DB, upload PDF, gửi, 3 người duyệt qua UI. Đơn đang chờ không đổi khi admin sửa biểu mẫu / tắt hạng mục; sửa bước bị chặn |
+| `concurrency.spec.ts` | Giữ khóa dòng để tái hiện chính xác: sửa nháp / xóa nháp / xóa tệp / sửa bước duyệt trùng lúc gửi đơn đều bị chặn; duyệt và hủy cùng lúc không lỗi server. Đã thử gỡ khóa trong code thì các test tương ứng fail |
+| `reassign.spec.ts` | Khóa người giữ vai trò duy nhất → tổng quan admin báo lượt treo → giao lại qua UI → người mới nhận thông báo và duyệt được; hủy đơn báo cho người giữ vai trò và người được họ ủy quyền |
+| `mobile.spec.ts` | 8 trang workspace ở 390×844: không tràn ngang, thanh tab đáy hiển thị |
+
+**Chưa kiểm:** kéo thả (form builder, bước duyệt) trên trình duyệt thật; portal admin trên điện thoại (thiết kế cho máy tính). Bảng "Đơn chờ tôi duyệt" trên điện thoại cuộn ngang trong bảng, chưa có dạng thẻ.
 
 ## 5. Rủi ro và lưu ý
 
@@ -327,5 +345,5 @@ Kiểm thử đầu-cuối tìm ra và đã sửa 3 lỗi: zsa `type: "formData"
 | Danh sách người dùng / đơn lọc phía client | Đủ cho vài nghìn dòng; lớn hơn thì chuyển sang phân trang và lọc ở server (query nhận tham số từ `searchParams`) |
 | Đếm "chờ tôi duyệt" chạy lại cả truy vấn danh sách | Đủ ở quy mô nội bộ; chậm thì viết truy vấn `count` riêng |
 | Lưu tệp trên ổ đĩa local (`uploads/`) | Không dùng được khi chạy nhiều instance; `storage.lib.ts` là chỗ duy nhất đọc/ghi, chuyển S3/R2 chỉ sửa file này |
-| Chưa có email (G7) | Liên kết đặt lại mật khẩu chỉ in ra log server; thêm dịch vụ email ở `auth.lib.ts` và hàm `notify()` trong `approvals.action.ts` |
+| Email (G7) | Chỉ có email đặt lại mật khẩu (cần cấu hình SMTP). Muốn gửi email thông báo duyệt thì gọi `sendMail()` trong `notify()` ở `approvals.action.ts` |
 | Giả định G1–G9 | Vẫn cần chốt với người viết `docs.md`; schema đang theo các giả định này |

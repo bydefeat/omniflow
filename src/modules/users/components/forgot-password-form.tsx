@@ -8,7 +8,7 @@ import { useState } from "react";
 import { SIGN_IN_PATH } from "@/shared/constants/role.constant";
 import { authClient } from "@/shared/libs/auth-client.lib";
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ available }: { available: boolean }) {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
@@ -20,6 +20,17 @@ export function ForgotPasswordForm() {
     });
     setLoading(false);
     setSent(true);
+  }
+
+  if (!available) {
+    return (
+      <Result
+        status="info"
+        title="Liên hệ quản trị viên"
+        subTitle="Hệ thống chưa cấu hình gửi email. Vui lòng liên hệ quản trị viên để được đặt lại mật khẩu."
+        extra={<Link href={SIGN_IN_PATH}>Quay lại đăng nhập</Link>}
+      />
+    );
   }
 
   if (sent) {

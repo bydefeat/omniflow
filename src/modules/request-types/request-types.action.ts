@@ -76,13 +76,19 @@ export const saveApprovalSteps = adminProcedure
   .input(approvalStepsInput)
   .handler(async ({ input: rawInput }) => {
     const input = rawInput as ApprovalStepsInput;
-    if (await hasPendingRequests(input.requestTypeId)) {
-      throw new ZSAError(
-        "PRECONDITION_FAILED",
-        "Loại đơn đang có đơn chờ duyệt. Hãy đợi các đơn này xử lý xong rồi mới đổi bước duyệt.",
-      );
-    }
     await db.transaction(async (tx) => {
+      const [type] = await tx
+        .select({ id: requestTypes.id })
+        .from(requestTypes)
+        .where(eq(requestTypes.id, input.requestTypeId))
+        .for("update");
+      if (!type) throw new ZSAError("NOT_FOUND", "Không tìm thấy loại đơn");
+      if (await hasPendingRequests(input.requestTypeId, tx)) {
+        throw new ZSAError(
+          "PRECONDITION_FAILED",
+          "Loại đơn đang có đơn chờ duyệt. Hãy đợi các đơn này xử lý xong rồi mới đổi bước duyệt.",
+        );
+      }
       await tx.delete(approvalSteps).where(eq(approvalSteps.requestTypeId, input.requestTypeId));
       await tx.insert(approvalSteps).values(
         input.steps.map((step, index) => ({
