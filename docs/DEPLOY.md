@@ -96,6 +96,12 @@ sudo nginx -t && sudo systemctl reload nginx
 
 `client_max_body_size 11m` khớp giới hạn tệp 10 MB của ứng dụng. nginx đặt `X-Real-IP`, nên đặt `DEFEAT_CLIENT_IP_HEADERS=x-real-ip` để giới hạn đăng nhập tính theo từng người dùng.
 
+### Chính sách đăng nhập (đã cài sẵn, không cần cấu hình)
+
+- Mật khẩu mới (admin tạo, đổi, đặt lại) tối thiểu 10 ký tự, có cả chữ và số. Mật khẩu cũ ngắn hơn vẫn đăng nhập được.
+- Sai mật khẩu 5 lần trong 15 phút thì email đó bị khóa đăng nhập 15 phút. Admin mở sớm bằng cách đặt mật khẩu mới hoặc mở khóa tài khoản.
+- Phiên đăng nhập hết hạn sau 3 ngày không dùng (tự gia hạn mỗi 12 giờ khi đang dùng). Đổi vai trò, khóa tài khoản hoặc đặt mật khẩu mới đều đăng xuất mọi phiên của người đó.
+
 ## 7. Cập nhật phiên bản
 
 ```bash

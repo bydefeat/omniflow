@@ -33,6 +33,7 @@ import {
   ROLES,
 } from "@/shared/constants/role.constant";
 import { parseRoles } from "@/shared/libs/role.lib";
+import { PASSWORD_HINT, passwordFormRule } from "@/shared/libs/password.lib";
 
 import { createUser, setUserBanned, setUserPassword, updateUser } from "../users.action";
 import type { UserFilters, UserOption, UserRow } from "../users.query";
@@ -279,9 +280,10 @@ export function UsersManager({ users, total, filters, managers, departments, cur
               <Form.Item
                 name="password"
                 label="Mật khẩu tạm"
+                extra={PASSWORD_HINT}
                 rules={[
                   { required: true, message: "Vui lòng nhập mật khẩu" },
-                  { min: 8, message: "Tối thiểu 8 ký tự" },
+                  passwordFormRule,
                 ]}
               >
                 <Input.Password autoComplete="new-password" />
@@ -325,9 +327,10 @@ export function UsersManager({ users, total, filters, managers, departments, cur
           <Form.Item
             name="newPassword"
             label="Mật khẩu mới"
+            extra={PASSWORD_HINT}
             rules={[
               { required: true, message: "Vui lòng nhập mật khẩu" },
-              { min: 8, message: "Tối thiểu 8 ký tự" },
+              passwordFormRule,
             ]}
           >
             <Input.Password autoComplete="new-password" />

@@ -106,3 +106,10 @@ export const rateLimit = pgTable("rate_limit", {
   count: integer().notNull(),
   lastRequest: bigint({ mode: "number" }).notNull(),
 });
+
+export const signInFailures = pgTable("sign_in_failures", {
+  email: varchar({ length: 255 }).primaryKey(),
+  failures: integer().notNull(),
+  firstFailedAt: timestamp({ withTimezone: true }).notNull(),
+  lockedUntil: timestamp({ withTimezone: true }),
+});

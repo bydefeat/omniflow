@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { ASSIGNABLE_ROLES } from "@/shared/constants/role.constant";
+import { passwordSchema } from "@/shared/libs/password.lib";
 
 const nullableId = z
   .string()
@@ -26,7 +27,7 @@ const userFields = {
 export const userCreateInput = z.object({
   ...userFields,
   email: z.email("Email không hợp lệ").trim().toLowerCase(),
-  password: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự").max(128),
+  password: passwordSchema,
 });
 
 export const userUpdateInput = z.object({
@@ -42,7 +43,7 @@ export const userBanInput = z.object({
 
 export const userPasswordInput = z.object({
   userId: z.string().min(1),
-  newPassword: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự").max(128),
+  newPassword: passwordSchema,
 });
 
 export type UserCreateValues = z.input<typeof userCreateInput>;
