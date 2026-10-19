@@ -1,13 +1,11 @@
 "use server";
 
 import { and, count, eq, inArray, sql } from "drizzle-orm";
-import { ZSAError } from "zsa";
 
 import { requestTypes } from "@/modules/request-types/request-types.schema";
 import { buildFormValidator, type FormField } from "@/modules/request-types/request-types.validation";
-import { authedProcedure } from "@/shared/libs/action.lib";
+import { ActionError, authedProcedure } from "@/shared/libs/action.lib";
 import { db } from "@/shared/libs/db.lib";
-import { getSession } from "@/shared/libs/session.lib";
 import { deleteStoredFile, saveFile } from "@/shared/libs/storage.lib";
 
 import {
@@ -37,7 +35,7 @@ async function loadActiveType(requestTypeId: string) {
     })
     .from(requestTypes)
     .where(and(eq(requestTypes.id, requestTypeId), eq(requestTypes.isActive, true)));
-  if (!type) throw new ZSAError("NOT_FOUND", "Loại đơn không tồn tại hoặc đã ngừng sử dụng");
+  if (!type) throw new ActionError("NOT_FOUND", "Loại đơn không tồn tại hoặc đã ngừng sử dụng");
   return type;
 }
 
@@ -46,7 +44,7 @@ function parseDraftFormData(type: { formSchema: FormField[] }, formData: Record<
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     const field = type.formSchema.find((f) => f.key === issue?.path[0]);
-    throw new ZSAError(
+    throw new ActionError(
       "UNPROCESSABLE_CONTENT",
       field ? `Trường "${field.label}" không hợp lệ: ${issue.message}` : "Dữ liệu biểu mẫu không hợp lệ",
     );
@@ -92,7 +90,7 @@ async function findOwnDraft(
     .from(requests)
     .where(and(eq(requests.id, requestId), eq(requests.requesterId, userId), inArray(requests.status, statuses)));
   const [request] = lock ? await query.for("update") : await query;
-  if (!request) throw new ZSAError("NOT_FOUND", "Không tìm thấy đơn nháp của bạn");
+  if (!request) throw new ActionError("NOT_FOUND", "Không tìm thấy đơn nháp của bạn");
   return request;
 }
 
@@ -152,46 +150,25 @@ export const deleteDraft = authedProcedure
     await Promise.all(files.map((f) => deleteStoredFile(f.storageKey)));
   });
 
-type UploadError = { code: string; message: string };
-
-export async function uploadAttachment(
-  formData: FormData,
-): Promise<readonly [AttachmentResult, null] | readonly [null, UploadError]> {
-  const session = await getSession();
-  if (!session) return [null, { code: "NOT_AUTHORIZED", message: "Phiên đăng nhập đã hết hạn" }];
-
-  const parsed = attachmentUploadInput.safeParse({
-    requestId: formData.get("requestId"),
-    file: formData.get("file"),
-  });
-  if (!parsed.success) return [null, { code: "INPUT_PARSE_ERROR", message: "Dữ liệu tải lên không hợp lệ" }];
-
-  try {
-    return [await saveAttachment(parsed.data.requestId, parsed.data.file, session.user.id), null];
-  } catch (error) {
-    if (error instanceof ZSAError) {
-      return [null, { code: error.code, message: typeof error.data === "string" ? error.data : error.message }];
-    }
-    throw error;
-  }
-}
-
-type AttachmentResult = Awaited<ReturnType<typeof saveAttachment>>;
+export const uploadAttachment = authedProcedure
+  .createServerAction()
+  .input(attachmentUploadInput, { type: "formData" })
+  .handler(async ({ input, ctx }) => saveAttachment(input.requestId, input.file, ctx.user.id));
 
 async function saveAttachment(requestId: string, file: File, userId: string) {
-  if (file.size === 0) throw new ZSAError("UNPROCESSABLE_CONTENT", "Tệp rỗng");
+  if (file.size === 0) throw new ActionError("UNPROCESSABLE_CONTENT", "Tệp rỗng");
   if (file.size > ATTACHMENT_MAX_BYTES) {
-    throw new ZSAError("PAYLOAD_TOO_LARGE", "Tệp vượt quá 10 MB");
+    throw new ActionError("PAYLOAD_TOO_LARGE", "Tệp vượt quá 10 MB");
   }
   if (!isAllowedAttachmentName(file.name)) {
-    throw new ZSAError("UNPROCESSABLE_CONTENT", "Chỉ nhận PDF, ảnh, Word hoặc Excel");
+    throw new ActionError("UNPROCESSABLE_CONTENT", "Chỉ nhận PDF, ảnh, Word hoặc Excel");
   }
   await findOwnDraft(db, requestId, userId, false, EDITABLE);
 
   const data = new Uint8Array(await file.arrayBuffer());
   const mimeType = resolveAttachmentType(data, file.name);
   if (!mimeType) {
-    throw new ZSAError("UNPROCESSABLE_CONTENT", "Nội dung hoặc đuôi tệp không khớp với định dạng PDF, ảnh, Word hoặc Excel");
+    throw new ActionError("UNPROCESSABLE_CONTENT", "Nội dung hoặc đuôi tệp không khớp với định dạng PDF, ảnh, Word hoặc Excel");
   }
   const storageKey = await saveFile(data);
   try {
@@ -202,7 +179,7 @@ async function saveAttachment(requestId: string, file: File, userId: string) {
         .from(attachments)
         .where(eq(attachments.requestId, draft.id));
       if (total >= ATTACHMENT_MAX_COUNT) {
-        throw new ZSAError("PRECONDITION_FAILED", `Tối đa ${ATTACHMENT_MAX_COUNT} tệp mỗi đơn`);
+        throw new ActionError("PRECONDITION_FAILED", `Tối đa ${ATTACHMENT_MAX_COUNT} tệp mỗi đơn`);
       }
       const [created] = await tx
         .insert(attachments)
@@ -246,7 +223,7 @@ export const deleteAttachment = authedProcedure
           ),
         )
         .for("update", { of: requests });
-      if (!row) throw new ZSAError("NOT_FOUND", "Không tìm thấy tệp");
+      if (!row) throw new ActionError("NOT_FOUND", "Không tìm thấy tệp");
       await tx.delete(attachments).where(eq(attachments.id, row.id));
       return row.storageKey;
     });

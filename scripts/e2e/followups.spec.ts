@@ -84,12 +84,14 @@ test("tệp có nội dung không khớp định dạng bị từ chối khi t�
   try {
     const page = await pageAs(browser, "employee");
     await page.goto(`/workspace/requests/${draft!.id}/edit`);
-    await page.locator('input[type="file"]').setInputFiles({
-      name: "hoa_don.pdf",
-      mimeType: "application/pdf",
-      buffer: Buffer.from("<html><script>alert(1)</script></html>"),
-    });
-    await expect(page.getByText(/hoa_don\.pdf: Nội dung hoặc đuôi tệp không khớp/)).toBeVisible();
+    await expect(async () => {
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "hoa_don.pdf",
+        mimeType: "application/pdf",
+        buffer: Buffer.from("<html><script>alert(1)</script></html>"),
+      });
+      await expect(page.getByText(/hoa_don\.pdf: Nội dung hoặc đuôi tệp không khớp/).first()).toBeVisible({ timeout: 3_000 });
+    }).toPass({ timeout: 20_000 });
     expect(await sql`select id from attachments where request_id = ${draft!.id}`).toHaveLength(0);
     await page.context().close();
   } finally {

@@ -1,19 +1,16 @@
 "use server";
 
 import { eq } from "drizzle-orm";
-import { ZSAError } from "zsa";
 
 import { ROLES } from "@/shared/constants/role.constant";
-import { roleProcedure } from "@/shared/libs/action.lib";
+import { ActionError, roleProcedure } from "@/shared/libs/action.lib";
 import { db } from "@/shared/libs/db.lib";
 import { PG_ERRORS, pgErrorCode } from "@/shared/libs/db-error.lib";
 
 import { hasPendingRequests } from "./request-types.query";
 import { approvalSteps, requestTypes } from "./request-types.schema";
 import {
-  type ApprovalStepsInput,
   approvalStepsInput,
-  type FormSchemaInput,
   formSchemaInput,
   requestTypeActiveInput,
   requestTypeInput,
@@ -24,7 +21,7 @@ const adminProcedure = roleProcedure(ROLES.ADMIN);
 
 function translate(error: unknown): never {
   if (pgErrorCode(error) === PG_ERRORS.UNIQUE) {
-    throw new ZSAError("CONFLICT", "Mã loại đơn đã tồn tại");
+    throw new ActionError("CONFLICT", "Mã loại đơn đã tồn tại");
   }
   throw error;
 }
@@ -51,7 +48,7 @@ export const updateRequestType = adminProcedure
       .where(eq(requestTypes.id, id))
       .returning({ id: requestTypes.id })
       .catch(translate);
-    if (updated.length === 0) throw new ZSAError("NOT_FOUND", "Không tìm thấy loại đơn");
+    if (updated.length === 0) throw new ActionError("NOT_FOUND", "Không tìm thấy loại đơn");
   });
 
 export const setRequestTypeActive = adminProcedure
@@ -68,7 +65,7 @@ export const saveFormSchema = adminProcedure
   .createServerAction()
   .input(formSchemaInput)
   .handler(async ({ input }) => {
-    const { requestTypeId, fields } = input as FormSchemaInput;
+    const { requestTypeId, fields } = input;
     await db
       .update(requestTypes)
       .set({
@@ -80,17 +77,16 @@ export const saveFormSchema = adminProcedure
 export const saveApprovalSteps = adminProcedure
   .createServerAction()
   .input(approvalStepsInput)
-  .handler(async ({ input: rawInput }) => {
-    const input = rawInput as ApprovalStepsInput;
+  .handler(async ({ input }) => {
     await db.transaction(async (tx) => {
       const [type] = await tx
         .select({ id: requestTypes.id })
         .from(requestTypes)
         .where(eq(requestTypes.id, input.requestTypeId))
         .for("update");
-      if (!type) throw new ZSAError("NOT_FOUND", "Không tìm thấy loại đơn");
+      if (!type) throw new ActionError("NOT_FOUND", "Không tìm thấy loại đơn");
       if (await hasPendingRequests(input.requestTypeId, tx)) {
-        throw new ZSAError(
+        throw new ActionError(
           "PRECONDITION_FAILED",
           "Loại đơn đang có đơn chờ duyệt. Hãy đợi các đơn này xử lý xong rồi mới đổi bước duyệt.",
         );

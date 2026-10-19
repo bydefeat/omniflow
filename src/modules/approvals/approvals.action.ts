@@ -2,7 +2,6 @@
 
 import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { after } from "next/server";
-import { ZSAError } from "zsa";
 
 import { getActiveDelegates } from "@/modules/delegations/delegations.query";
 import { notifications } from "@/modules/notifications/notifications.schema";
@@ -12,7 +11,7 @@ import { requestCounters, requestItems, requests, type RequestSnapshot } from "@
 import { formatRequestCode } from "@/modules/requests/requests.service";
 import { user } from "@/modules/users/users.schema";
 import { FUNCTIONAL_ROLES, ROLES } from "@/shared/constants/role.constant";
-import { authedProcedure, roleProcedure } from "@/shared/libs/action.lib";
+import { ActionError, authedProcedure, roleProcedure } from "@/shared/libs/action.lib";
 import { db } from "@/shared/libs/db.lib";
 import { env } from "@/shared/libs/env.lib";
 import { isMailConfigured, sendMail } from "@/shared/libs/mail.lib";
@@ -51,7 +50,7 @@ async function findRoleHolders(tx: Tx, role: string, excludeId: string) {
 async function assign(tx: Tx, step: StepConfig, requester: { id: string; managerId: string | null }) {
   const assignee = resolveAssignee(step, requester);
   if (!assignee) {
-    throw new ZSAError(
+    throw new ActionError(
       "PRECONDITION_FAILED",
       `Bước "${step.name}" cần quản lý trực tiếp nhưng người làm đơn chưa được gán quản lý. Vui lòng liên hệ quản trị viên.`,
     );
@@ -61,7 +60,7 @@ async function assign(tx: Tx, step: StepConfig, requester: { id: string; manager
       ? [assignee.approverId]
       : await findRoleHolders(tx, assignee.approverRole, requester.id);
   if (recipients.length === 0) {
-    throw new ZSAError(
+    throw new ActionError(
       "PRECONDITION_FAILED",
       `Bước "${step.name}" chưa có ai giữ vai trò ${roleLabel(step.approverRole ?? "")}. Vui lòng liên hệ quản trị viên.`,
     );
@@ -72,7 +71,7 @@ async function assign(tx: Tx, step: StepConfig, requester: { id: string; manager
       .from(user)
       .where(eq(user.id, assignee.approverId));
     if (manager?.banned) {
-      throw new ZSAError(
+      throw new ActionError(
         "PRECONDITION_FAILED",
         `Quản lý trực tiếp cho bước "${step.name}" đang bị khóa tài khoản. Vui lòng liên hệ quản trị viên.`,
       );
@@ -162,7 +161,7 @@ async function snapshotFlow(tx: Tx, requestTypeId: string) {
     .from(requestTypes)
     .where(eq(requestTypes.id, requestTypeId))
     .for("share");
-  if (!type?.isActive) throw new ZSAError("PRECONDITION_FAILED", "Loại đơn đã ngừng sử dụng");
+  if (!type?.isActive) throw new ActionError("PRECONDITION_FAILED", "Loại đơn đã ngừng sử dụng");
   const steps = await tx
     .select({
       stepOrder: approvalSteps.stepOrder,
@@ -208,19 +207,19 @@ export const submitRequest = authedProcedure
         .where(eq(requests.id, input.requestId))
         .for("update");
       if (!request || request.requesterId !== ctx.user.id) {
-        throw new ZSAError("NOT_FOUND", "Không tìm thấy đơn của bạn");
+        throw new ActionError("NOT_FOUND", "Không tìm thấy đơn của bạn");
       }
-      if (request.status !== "DRAFT") throw new ZSAError("CONFLICT", "Đơn này đã được gửi");
+      if (request.status !== "DRAFT") throw new ActionError("CONFLICT", "Đơn này đã được gửi");
 
       const flow = await snapshotFlow(tx, request.requestTypeId);
       const { steps } = flow;
       if (steps.length === 0) {
-        throw new ZSAError("PRECONDITION_FAILED", "Loại đơn chưa được cấu hình bước duyệt");
+        throw new ActionError("PRECONDITION_FAILED", "Loại đơn chưa được cấu hình bước duyệt");
       }
       const form = buildFormValidator(flow.formSchema).safeParse(request.formData);
       if (!form.success) {
         const field = flow.formSchema.find((f) => f.key === form.error.issues[0]?.path[0]);
-        throw new ZSAError(
+        throw new ActionError(
           "UNPROCESSABLE_CONTENT",
           field ? `Biểu mẫu chưa hợp lệ ở trường "${field.label}"` : "Biểu mẫu còn thiếu thông tin bắt buộc",
         );
@@ -230,7 +229,7 @@ export const submitRequest = authedProcedure
           .select({ total: count() })
           .from(requestItems)
           .where(eq(requestItems.requestId, request.id));
-        if (total === 0) throw new ZSAError("UNPROCESSABLE_CONTENT", "Cần ít nhất một hạng mục chi tiết");
+        if (total === 0) throw new ActionError("UNPROCESSABLE_CONTENT", "Cần ít nhất một hạng mục chi tiết");
       }
 
       const requester = await loadRequester(tx, ctx.user.id);
@@ -268,7 +267,7 @@ async function lockRequestAndRound(tx: Tx, approvalId: string) {
     .select({ requestId: approvals.requestId })
     .from(approvals)
     .where(eq(approvals.id, approvalId));
-  if (!target) throw new ZSAError("NOT_FOUND", "Không tìm thấy lượt duyệt");
+  if (!target) throw new ActionError("NOT_FOUND", "Không tìm thấy lượt duyệt");
   const [request] = await tx
     .select({
       requestId: requests.id,
@@ -294,20 +293,20 @@ async function lockRequestAndRound(tx: Tx, approvalId: string) {
     .where(eq(approvals.id, approvalId))
     .for("update");
   const row = request && round ? { ...request, ...round } : null;
-  if (!row) throw new ZSAError("NOT_FOUND", "Không tìm thấy lượt duyệt");
+  if (!row) throw new ActionError("NOT_FOUND", "Không tìm thấy lượt duyệt");
   return row;
 }
 
 async function lockRound(tx: Tx, approvalId: string, actorId: string) {
   const row = await lockRequestAndRound(tx, approvalId);
-  if (row.requestStatus !== "PENDING") throw new ZSAError("CONFLICT", "Đơn không còn ở trạng thái chờ duyệt");
+  if (row.requestStatus !== "PENDING") throw new ActionError("CONFLICT", "Đơn không còn ở trạng thái chờ duyệt");
 
   const actor = await getActorContext(actorId);
   const decision = decideAct(row, actor, actor.delegators);
   if (!decision.allowed) {
-    if (decision.reason === "NOT_WAITING") throw new ZSAError("CONFLICT", "Lượt duyệt này đã được xử lý");
-    if (decision.reason === "OWN_REQUEST") throw new ZSAError("FORBIDDEN", "Bạn không thể tự duyệt đơn của mình");
-    throw new ZSAError("FORBIDDEN", "Bạn không phải người duyệt của bước này");
+    if (decision.reason === "NOT_WAITING") throw new ActionError("CONFLICT", "Lượt duyệt này đã được xử lý");
+    if (decision.reason === "OWN_REQUEST") throw new ActionError("FORBIDDEN", "Bạn không thể tự duyệt đơn của mình");
+    throw new ActionError("FORBIDDEN", "Bạn không phải người duyệt của bước này");
   }
   return { row, onBehalfOfId: decision.onBehalfOfId };
 }
@@ -403,14 +402,14 @@ export const resubmitRequest = authedProcedure
         .where(eq(requests.id, input.requestId))
         .for("update");
       if (!request || request.requesterId !== ctx.user.id) {
-        throw new ZSAError("NOT_FOUND", "Không tìm thấy đơn của bạn");
+        throw new ActionError("NOT_FOUND", "Không tìm thấy đơn của bạn");
       }
-      if (request.status !== "NEEDS_INFO") throw new ZSAError("CONFLICT", "Đơn này không ở trạng thái cần bổ sung");
+      if (request.status !== "NEEDS_INFO") throw new ActionError("CONFLICT", "Đơn này không ở trạng thái cần bổ sung");
       const flow = request.snapshot!;
       const form = buildFormValidator(flow.formSchema).safeParse(request.formData);
       if (!form.success) {
         const field = flow.formSchema.find((f) => f.key === form.error.issues[0]?.path[0]);
-        throw new ZSAError(
+        throw new ActionError(
           "UNPROCESSABLE_CONTENT",
           field ? `Biểu mẫu chưa hợp lệ ở trường "${field.label}"` : "Biểu mẫu còn thiếu thông tin bắt buộc",
         );
@@ -420,7 +419,7 @@ export const resubmitRequest = authedProcedure
           .select({ total: count() })
           .from(requestItems)
           .where(eq(requestItems.requestId, request.id));
-        if (total === 0) throw new ZSAError("UNPROCESSABLE_CONTENT", "Cần ít nhất một hạng mục chi tiết");
+        if (total === 0) throw new ActionError("UNPROCESSABLE_CONTENT", "Cần ít nhất một hạng mục chi tiết");
       }
 
       const [returned] = await tx
@@ -456,10 +455,10 @@ export const cancelRequest = authedProcedure
         .where(eq(requests.id, input.requestId))
         .for("update");
       if (!request || request.requesterId !== ctx.user.id) {
-        throw new ZSAError("NOT_FOUND", "Không tìm thấy đơn của bạn");
+        throw new ActionError("NOT_FOUND", "Không tìm thấy đơn của bạn");
       }
       if (request.status !== "PENDING" && request.status !== "NEEDS_INFO") {
-        throw new ZSAError("CONFLICT", "Chỉ hủy được đơn đang chờ duyệt hoặc đang chờ bổ sung");
+        throw new ActionError("CONFLICT", "Chỉ hủy được đơn đang chờ duyệt hoặc đang chờ bổ sung");
       }
       const now = new Date();
       const waiting = await tx
@@ -493,14 +492,14 @@ export const reassignApproval = roleProcedure(ROLES.ADMIN)
     await inTransaction(async (tx, outbox) => {
       const row = await lockRequestAndRound(tx, input.approvalId);
       if (row.requestStatus !== "PENDING" || row.result !== "WAITING") {
-        throw new ZSAError("CONFLICT", "Lượt duyệt này đã được xử lý");
+        throw new ActionError("CONFLICT", "Lượt duyệt này đã được xử lý");
       }
       if (input.approverId === row.requesterId) {
-        throw new ZSAError("UNPROCESSABLE_CONTENT", "Không thể giao cho chính người làm đơn");
+        throw new ActionError("UNPROCESSABLE_CONTENT", "Không thể giao cho chính người làm đơn");
       }
       const [assignee] = await tx.select({ banned: user.banned }).from(user).where(eq(user.id, input.approverId));
       if (!assignee || assignee.banned) {
-        throw new ZSAError("UNPROCESSABLE_CONTENT", "Người được chọn không tồn tại hoặc đã bị khóa");
+        throw new ActionError("UNPROCESSABLE_CONTENT", "Người được chọn không tồn tại hoặc đã bị khóa");
       }
       await tx
         .update(approvals)
