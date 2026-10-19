@@ -1,12 +1,15 @@
+import { type ReactNode, Suspense } from "react";
+
 import { canAccessApprovals } from "@/modules/approvals/approvals.query";
 import { PendingApprovalsBadge } from "@/modules/approvals/components/pending-approvals-badge";
 import { canDelegate, hasReceivedDelegations } from "@/modules/delegations/delegations.query";
 import { NotificationBell } from "@/modules/notifications/components/notification-bell";
 import { WorkspaceLayout } from "@/shared/components/layouts/workspace";
+import { PageSkeleton } from "@/shared/components/ui/page-skeleton";
 import { ROLES } from "@/shared/constants/role.constant";
 import { requireRole } from "@/shared/libs/session.lib";
 
-export default async function Layout({ children }: LayoutProps<"/workspace">) {
+async function WorkspaceShell({ children }: { children: ReactNode }) {
   const { user } = await requireRole(ROLES.EMPLOYEE);
   const [canApprove, delegate, received] = await Promise.all([
     canAccessApprovals(user.id),
@@ -23,5 +26,13 @@ export default async function Layout({ children }: LayoutProps<"/workspace">) {
     >
       {children}
     </WorkspaceLayout>
+  );
+}
+
+export default function Layout({ children }: LayoutProps<"/workspace">) {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <WorkspaceShell>{children}</WorkspaceShell>
+    </Suspense>
   );
 }

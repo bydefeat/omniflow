@@ -68,7 +68,7 @@ export const WORKSPACE_NAV: NavItem[] = [
   {
     key: "delegations",
     label: "Ủy quyền",
-    href: "/workspace/approvals/delegations",
+    href: "/workspace/delegations",
     icon: createElement(SwapOutlined),
     access: "delegations",
   },

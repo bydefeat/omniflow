@@ -1,7 +1,7 @@
 import { and, asc, count, desc, eq, inArray, isNotNull, ne, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
-import { getActiveDelegators, hasReceivedDelegations } from "@/modules/delegations/delegations.query";
+import { getActiveDelegators } from "@/modules/delegations/delegations.query";
 import { departments } from "@/modules/departments/departments.schema";
 import { getApprovalSteps } from "@/modules/request-types/request-types.query";
 import { requestTypes } from "@/modules/request-types/request-types.schema";
@@ -52,7 +52,6 @@ function pendingFor(actor: ActorContext) {
 export async function canAccessApprovals(userId: string) {
   const actor = await getActorContext(userId);
   if (hasApproverRole(actor.roles) || actor.delegators.length > 0) return true;
-  if (await hasReceivedDelegations(userId)) return true;
   const [subordinate] = await db.select({ id: user.id }).from(user).where(eq(user.managerId, userId)).limit(1);
   if (subordinate) return true;
   const [involved] = await db

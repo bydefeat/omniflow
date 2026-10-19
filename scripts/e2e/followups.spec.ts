@@ -18,7 +18,7 @@ test("người chỉ được ủy quyền vào được trang ủy quyền, ng�
   let requestId: string | undefined;
   try {
     const page = await pageAs(browser, "employee");
-    await page.goto("/workspace/approvals/delegations");
+    await page.goto("/workspace/delegations");
     await expect(page.getByText("Tôi được ủy quyền")).toBeVisible();
     await expect(page.getByText("Tạo ủy quyền mới")).toHaveCount(0);
     await page.context().close();

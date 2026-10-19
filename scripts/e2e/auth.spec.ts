@@ -58,3 +58,20 @@ test("admin đặt mật khẩu mới thì các phiên cũ của người dùng 
     await admin.dispose();
   }
 });
+
+test("không có luồng đăng ký: API sign-up bị chặn, không có trang hay liên kết đăng ký", async ({ page, request }) => {
+  const email = `signup.${Date.now()}@omniflow.local`;
+  const response = await request.post("/api/auth/sign-up/email", {
+    data: { email, password: "Matkhau@123", name: "Tự đăng ký" },
+    headers: { origin: BASE_URL },
+  });
+  expect(response.ok()).toBe(false);
+  expect(await sql`select id from "user" where email = ${email}`).toHaveLength(0);
+
+  await page.goto("/authentication/sign-up");
+  await expect(page.getByText(/404|could not be found/i).first()).toBeVisible();
+
+  await page.goto("/authentication/sign-in");
+  await expect(page.getByRole("button", { name: "Đăng nhập" })).toBeVisible();
+  await expect(page.getByText(/đăng ký|sign up/i)).toHaveCount(0);
+});
