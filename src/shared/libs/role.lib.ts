@@ -20,10 +20,11 @@ export function getHomePath(role: string | null | undefined) {
 }
 
 export function safeCallbackPath(value: unknown) {
-  return typeof value === "string" &&
-    value.startsWith("/") &&
-    !value.startsWith("//") &&
-    !value.startsWith("/\\")
-    ? value
-    : null;
+  if (typeof value !== "string" || !value.startsWith("/") || /[\\\u0000-\u001f\u007f]/.test(value)) {
+    return null;
+  }
+  const base = "http://omniflow.invalid";
+  const url = new URL(value, base);
+  if (url.origin !== base || url.pathname.startsWith("//")) return null;
+  return url.pathname + url.search + url.hash;
 }

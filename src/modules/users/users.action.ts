@@ -125,9 +125,15 @@ export const setUserBanned = adminProcedure
 export const setUserPassword = adminProcedure
   .createServerAction()
   .input(userPasswordInput)
-  .handler(async ({ input }) => {
+  .handler(async ({ input, ctx }) => {
+    const requestHeaders = await headers();
     await auth.api.setUserPassword({
-      headers: await headers(),
+      headers: requestHeaders,
       body: { userId: input.userId, newPassword: input.newPassword },
     });
+    if (input.userId === ctx.user.id) {
+      await auth.api.revokeOtherSessions({ headers: requestHeaders });
+    } else {
+      await auth.api.revokeUserSessions({ headers: requestHeaders, body: { userId: input.userId } });
+    }
   });

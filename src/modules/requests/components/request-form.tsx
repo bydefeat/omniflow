@@ -11,7 +11,7 @@ import { createDraft, updateDraft } from "../requests.action";
 import type { DraftForEdit } from "../requests.query";
 import { AttachmentsPanel } from "./attachments-panel";
 import { DynamicFields, fromFormDataPayload, toFormDataPayload } from "./dynamic-fields";
-import { type LineItemValue, LineItemsTable, newLineItem } from "./line-items-table";
+import { isBlankLineItem, lineItemProblem, type LineItemValue, LineItemsTable, newLineItem } from "./line-items-table";
 
 type SubmitAction = (input: { requestId: string }) => Promise<readonly [unknown, { message: string } | null]>;
 
@@ -28,6 +28,11 @@ type Values = {
   formData?: Record<string, unknown>;
   items?: LineItemValue[];
 };
+
+function firstFieldError(error: unknown) {
+  const fieldErrors = (error as { fieldErrors?: Record<string, string[] | undefined> }).fieldErrors;
+  return Object.values(fieldErrors ?? {}).flat().find(Boolean);
+}
 
 export function RequestForm({ types, draft, submitAction }: Props) {
   const router = useRouter();
@@ -72,11 +77,17 @@ export function RequestForm({ types, draft, submitAction }: Props) {
 
   async function persist(): Promise<string | null> {
     const values = form.getFieldsValue(true) as Values;
+    const items = (type?.hasLineItems ? (values.items ?? []) : []).filter((item) => !isBlankLineItem(item));
+    const problemIndex = items.findIndex((item) => lineItemProblem(item));
+    if (problemIndex >= 0) {
+      message.error(`Hạng mục dòng ${problemIndex + 1}: ${lineItemProblem(items[problemIndex])}`);
+      return null;
+    }
     const payload = {
       title: values.title,
       reason: values.reason,
       formData: toFormDataPayload(type?.formSchema ?? [], values.formData),
-      items: (type?.hasLineItems ? (values.items ?? []) : []).map((item) => ({
+      items: items.map((item) => ({
         name: item.name,
         unit: item.unit,
         quantity: item.quantity ?? 0,
@@ -89,7 +100,7 @@ export function RequestForm({ types, draft, submitAction }: Props) {
     if (error) {
       message.error(
         error.code === "INPUT_PARSE_ERROR"
-          ? "Thông tin chưa hợp lệ. Kiểm tra lại các hạng mục (tên, đơn vị, số lượng > 0)."
+          ? (firstFieldError(error) ?? "Thông tin chưa hợp lệ, vui lòng kiểm tra lại.")
           : error.message,
       );
       return null;
@@ -110,9 +121,11 @@ export function RequestForm({ types, draft, submitAction }: Props) {
 
   async function submit() {
     await form.validateFields();
-    const items = (form.getFieldValue("items") as LineItemValue[] | undefined) ?? [];
-    if (type?.hasLineItems && items.some((i) => !i.name.trim() || !i.unit.trim() || !i.quantity)) {
-      return message.error("Mỗi hạng mục cần có tên, đơn vị tính và số lượng");
+    const items = ((form.getFieldValue("items") as LineItemValue[] | undefined) ?? []).filter(
+      (item) => !isBlankLineItem(item),
+    );
+    if (type?.hasLineItems && items.length === 0) {
+      return message.error("Cần ít nhất một hạng mục chi tiết");
     }
     const confirmed = await modal.confirm({
       title: "Gửi đơn đi duyệt?",

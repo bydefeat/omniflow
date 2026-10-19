@@ -118,7 +118,7 @@ export function UsersManager({ users, departments, currentUserId }: Props) {
     const [, error] = await setUserPassword({ userId: passwordFor.id, newPassword });
     setSaving(false);
     if (error) return message.error(error.message);
-    message.success("Đã đặt mật khẩu mới");
+    message.success("Đã đặt mật khẩu mới và đăng xuất các phiên cũ của tài khoản");
     setPasswordFor(null);
   }
 
