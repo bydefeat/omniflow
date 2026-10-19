@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { authedProcedure } from "@/shared/libs/action.lib";
@@ -8,6 +8,8 @@ import { db } from "@/shared/libs/db.lib";
 
 import { countUnread, listNotifications } from "./notifications.query";
 import { notifications } from "./notifications.schema";
+
+const NOTIFICATION_RETENTION_DAYS = 180;
 
 export const getNotificationSummary = authedProcedure
   .createServerAction()
@@ -35,4 +37,13 @@ export const markAllNotificationsRead = authedProcedure
       .update(notifications)
       .set({ readAt: new Date() })
       .where(and(eq(notifications.userId, ctx.user.id), isNull(notifications.readAt)));
+    await db
+      .delete(notifications)
+      .where(
+        and(
+          eq(notifications.userId, ctx.user.id),
+          isNotNull(notifications.readAt),
+          lt(notifications.createdAt, sql`now() - make_interval(days => ${NOTIFICATION_RETENTION_DAYS})`),
+        ),
+      );
   });

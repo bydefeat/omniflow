@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, ne, or, type SQL, sql } from "drizzle-orm";
+import { type AnyColumn, and, asc, count, desc, eq, ilike, inArray, isNotNull, ne, not, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { getActiveDelegators } from "@/modules/delegations/delegations.query";
@@ -9,6 +9,8 @@ import { requests } from "@/modules/requests/requests.schema";
 import { user } from "@/modules/users/users.schema";
 import { ROLES } from "@/shared/constants/role.constant";
 import { db } from "@/shared/libs/db.lib";
+import { APP_TIME_ZONE } from "@/shared/libs/format.lib";
+import { escapeLike, PAGE_SIZE } from "@/shared/libs/list-params.lib";
 import { parseRoles } from "@/shared/libs/role.lib";
 
 import { approvals } from "./approvals.schema";
@@ -66,45 +68,90 @@ export async function canAccessApprovals(userId: string) {
 
 const requester = alias(user, "requester");
 
-export async function getPendingApprovals(userId: string) {
-  const actor = await getActorContext(userId);
-  const rows = await db
-    .select({
-      approvalId: approvals.id,
-      requestId: requests.id,
-      code: requests.code,
-      title: requests.title,
-      totalAmount: requests.totalAmount,
-      submittedAt: requests.submittedAt,
-      typeName: requestTypes.name,
-      requesterId: requests.requesterId,
-      requesterName: requester.name,
-      departmentName: departments.name,
-      stepOrder: approvals.stepOrder,
-      stepName: approvals.stepName,
-      approverId: approvals.approverId,
-      approverRole: approvals.approverRole,
-      result: approvals.result,
-      dueAt: approvals.dueAt,
-      overdue: sql<boolean>`${approvals.dueAt} < now()`,
-    })
-    .from(approvals)
-    .innerJoin(requests, eq(requests.id, approvals.requestId))
-    .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
-    .innerJoin(requester, eq(requester.id, requests.requesterId))
-    .leftJoin(departments, eq(departments.id, requests.departmentId))
-    .where(pendingFor(actor))
-    .orderBy(asc(approvals.dueAt));
+export type PendingScope = "mine" | "delegated";
+export type PendingFilters = { q?: string; typeId?: string; scope?: PendingScope; overdue?: "1"; page: number };
 
-  return rows.flatMap((row) => {
-    const decision = decideAct(row, actor, actor.delegators);
-    if (!decision.allowed) return [];
-    const onBehalfOf = actor.delegators.find((d) => d.id === decision.onBehalfOfId);
-    return [{ ...row, onBehalfOfName: onBehalfOf?.name ?? null }];
-  });
+function searchText(q: string | undefined, ...columns: AnyColumn[]) {
+  if (!q) return undefined;
+  const pattern = `%${escapeLike(q)}%`;
+  return or(...columns.map((column) => ilike(column, pattern)));
 }
 
-export type PendingApprovalRow = Awaited<ReturnType<typeof getPendingApprovals>>[number];
+function pendingWhere(actor: ActorContext, filters: Omit<PendingFilters, "page">) {
+  const mine = assignedToPerson(actor);
+  return and(
+    pendingFor(actor),
+    filters.scope === "mine" ? mine : undefined,
+    filters.scope === "delegated" ? not(mine) : undefined,
+    filters.typeId ? eq(requests.requestTypeId, filters.typeId) : undefined,
+    filters.overdue ? sql`${approvals.dueAt} < now()` : undefined,
+    searchText(filters.q, requests.code, requests.title, requester.name),
+  );
+}
+
+export async function searchPendingApprovals(userId: string, filters: PendingFilters) {
+  const actor = await getActorContext(userId);
+  const where = pendingWhere(actor, filters);
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select({
+        approvalId: approvals.id,
+        requestId: requests.id,
+        code: requests.code,
+        title: requests.title,
+        totalAmount: requests.totalAmount,
+        submittedAt: requests.submittedAt,
+        typeName: requestTypes.name,
+        requesterId: requests.requesterId,
+        requesterName: requester.name,
+        departmentName: departments.name,
+        stepOrder: approvals.stepOrder,
+        stepName: approvals.stepName,
+        approverId: approvals.approverId,
+        approverRole: approvals.approverRole,
+        result: approvals.result,
+        dueAt: approvals.dueAt,
+        overdue: sql<boolean>`${approvals.dueAt} < now()`,
+      })
+      .from(approvals)
+      .innerJoin(requests, eq(requests.id, approvals.requestId))
+      .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
+      .innerJoin(requester, eq(requester.id, requests.requesterId))
+      .leftJoin(departments, eq(departments.id, requests.departmentId))
+      .where(where)
+      .orderBy(asc(approvals.dueAt), asc(approvals.id))
+      .limit(PAGE_SIZE)
+      .offset((filters.page - 1) * PAGE_SIZE),
+    db
+      .select({ total: count() })
+      .from(approvals)
+      .innerJoin(requests, eq(requests.id, approvals.requestId))
+      .innerJoin(requester, eq(requester.id, requests.requesterId))
+      .where(where),
+  ]);
+
+  return {
+    total,
+    hasDelegators: actor.delegators.length > 0,
+    rows: rows.map((row) => {
+      const decision = decideAct(row, actor, actor.delegators);
+      const onBehalfOfId = decision.allowed ? decision.onBehalfOfId : null;
+      return { ...row, onBehalfOfName: actor.delegators.find((d) => d.id === onBehalfOfId)?.name ?? null };
+    }),
+  };
+}
+
+export async function summarizePendingApprovals(userId: string) {
+  const actor = await getActorContext(userId);
+  const [row] = await db
+    .select({ total: count(), overdue: sql<number>`count(*) filter (where ${approvals.dueAt} < now())::int` })
+    .from(approvals)
+    .innerJoin(requests, eq(requests.id, approvals.requestId))
+    .where(pendingFor(actor));
+  return row;
+}
+
+export type PendingApprovalRow = Awaited<ReturnType<typeof searchPendingApprovals>>["rows"][number];
 
 export async function countPendingApprovals(userId: string) {
   const actor = await getActorContext(userId);
@@ -119,34 +166,52 @@ export async function countPendingApprovals(userId: string) {
 const onBehalfOf = alias(user, "on_behalf_of");
 const actedBy = alias(user, "acted_by");
 
-export async function getApprovalHistory(userId: string) {
-  return db
-    .select({
-      approvalId: approvals.id,
-      requestId: requests.id,
-      code: requests.code,
-      title: requests.title,
-      typeName: requestTypes.name,
-      requesterName: requester.name,
-      stepName: approvals.stepName,
-      result: approvals.result,
-      comment: approvals.comment,
-      decidedAt: approvals.decidedAt,
-      onBehalfOfName: onBehalfOf.name,
-      actedByName: actedBy.name,
-      actedByDelegate: sql<boolean>`${approvals.actedById} <> ${userId}`,
-    })
-    .from(approvals)
-    .innerJoin(requests, eq(requests.id, approvals.requestId))
-    .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
-    .innerJoin(requester, eq(requester.id, requests.requesterId))
-    .leftJoin(onBehalfOf, eq(onBehalfOf.id, approvals.onBehalfOfId))
-    .leftJoin(actedBy, eq(actedBy.id, approvals.actedById))
-    .where(or(eq(approvals.actedById, userId), eq(approvals.onBehalfOfId, userId)))
-    .orderBy(desc(approvals.decidedAt));
+export type HistoryFilters = { q?: string; result?: "APPROVED" | "REJECTED" | "RETURNED"; page: number };
+
+export async function searchApprovalHistory(userId: string, filters: HistoryFilters) {
+  const where = and(
+    or(eq(approvals.actedById, userId), eq(approvals.onBehalfOfId, userId)),
+    filters.result ? eq(approvals.result, filters.result) : undefined,
+    searchText(filters.q, requests.code, requests.title, requester.name),
+  );
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select({
+        approvalId: approvals.id,
+        requestId: requests.id,
+        code: requests.code,
+        title: requests.title,
+        typeName: requestTypes.name,
+        requesterName: requester.name,
+        stepName: approvals.stepName,
+        result: approvals.result,
+        comment: approvals.comment,
+        decidedAt: approvals.decidedAt,
+        onBehalfOfName: onBehalfOf.name,
+        actedByName: actedBy.name,
+        actedByDelegate: sql<boolean>`${approvals.actedById} <> ${userId}`,
+      })
+      .from(approvals)
+      .innerJoin(requests, eq(requests.id, approvals.requestId))
+      .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
+      .innerJoin(requester, eq(requester.id, requests.requesterId))
+      .leftJoin(onBehalfOf, eq(onBehalfOf.id, approvals.onBehalfOfId))
+      .leftJoin(actedBy, eq(actedBy.id, approvals.actedById))
+      .where(where)
+      .orderBy(desc(approvals.decidedAt), desc(approvals.id))
+      .limit(PAGE_SIZE)
+      .offset((filters.page - 1) * PAGE_SIZE),
+    db
+      .select({ total: count() })
+      .from(approvals)
+      .innerJoin(requests, eq(requests.id, approvals.requestId))
+      .innerJoin(requester, eq(requester.id, requests.requesterId))
+      .where(where),
+  ]);
+  return { rows, total };
 }
 
-export type ApprovalHistoryRow = Awaited<ReturnType<typeof getApprovalHistory>>[number];
+export type ApprovalHistoryRow = Awaited<ReturnType<typeof searchApprovalHistory>>["rows"][number];
 
 const approver = alias(user, "approver");
 const reassignedBy = alias(user, "reassigned_by");
@@ -327,6 +392,9 @@ export async function getAdminOverview() {
 }
 
 export async function getReportData() {
+  // Inline the zone as a literal: a bound parameter would make GROUP BY and SELECT different expressions.
+  const zone = sql.raw(`'${APP_TIME_ZONE}'`);
+  const localMonth = sql`date_trunc('month', ${requests.submittedAt} at time zone ${zone})`;
   const [byType, monthly, stepDurations, [sla]] = await Promise.all([
     db
       .select({ typeName: requestTypes.name, status: requests.status, total: count() })
@@ -337,15 +405,15 @@ export async function getReportData() {
       .orderBy(asc(requestTypes.name)),
     db
       .select({
-        month: sql<string>`to_char(date_trunc('month', ${requests.submittedAt}), 'MM/YYYY')`,
+        month: sql<string>`to_char(${localMonth}, 'MM/YYYY')`,
         total: count(),
         approved: sql<number>`count(*) filter (where ${requests.status} = 'APPROVED')`.mapWith(Number),
         rejected: sql<number>`count(*) filter (where ${requests.status} = 'REJECTED')`.mapWith(Number),
       })
       .from(requests)
-      .where(and(ne(requests.status, "DRAFT"), sql`${requests.submittedAt} >= date_trunc('month', now()) - interval '5 months'`))
-      .groupBy(sql`date_trunc('month', ${requests.submittedAt})`)
-      .orderBy(sql`date_trunc('month', ${requests.submittedAt})`),
+      .where(and(ne(requests.status, "DRAFT"), sql`${requests.submittedAt} >= (date_trunc('month', now() at time zone ${zone}) - interval '5 months') at time zone ${zone}`))
+      .groupBy(localMonth)
+      .orderBy(localMonth),
     db
       .select({
         key: sql<string>`${requestTypes.id} || ':' || ${approvals.stepOrder} || ':' || ${approvals.stepName}`,
