@@ -15,7 +15,8 @@ export function AdministratorSidebar() {
     pathname,
   );
 
-  const items: MenuProps["items"] = ADMINISTRATOR_NAV.flatMap((group) => {
+  type MenuItem = NonNullable<MenuProps["items"]>[number];
+  const items = ADMINISTRATOR_NAV.flatMap<MenuItem>((group) => {
     const children = group.items.map((item) => ({
       key: item.key,
       icon: item.icon,

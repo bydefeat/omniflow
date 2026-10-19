@@ -84,6 +84,8 @@ export const approvalStepsInput = z.object({
   steps: z.array(approvalStepInput).min(1, "Cần ít nhất một bước duyệt").max(10),
 });
 
+export type FormSchemaInput = z.infer<typeof formSchemaInput>;
+export type ApprovalStepsInput = z.infer<typeof approvalStepsInput>;
 export type RequestTypeFormValues = z.input<typeof requestTypeInput>;
 export type ApprovalStepValues = z.input<typeof approvalStepInput>;
 

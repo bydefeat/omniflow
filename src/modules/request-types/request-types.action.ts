@@ -11,7 +11,9 @@ import { PG_ERRORS, pgErrorCode } from "@/shared/libs/db-error.lib";
 import { hasPendingRequests } from "./request-types.query";
 import { approvalSteps, requestTypes } from "./request-types.schema";
 import {
+  type ApprovalStepsInput,
   approvalStepsInput,
+  type FormSchemaInput,
   formSchemaInput,
   requestTypeActiveInput,
   requestTypeInput,
@@ -60,18 +62,20 @@ export const saveFormSchema = adminProcedure
   .createServerAction()
   .input(formSchemaInput)
   .handler(async ({ input }) => {
+    const { requestTypeId, fields } = input as FormSchemaInput;
     await db
       .update(requestTypes)
       .set({
-        formSchema: input.fields.map((f) => (f.type === "select" ? f : { ...f, options: undefined })),
+        formSchema: fields.map((f) => (f.type === "select" ? f : { ...f, options: undefined })),
       })
-      .where(eq(requestTypes.id, input.requestTypeId));
+      .where(eq(requestTypes.id, requestTypeId));
   });
 
 export const saveApprovalSteps = adminProcedure
   .createServerAction()
   .input(approvalStepsInput)
-  .handler(async ({ input }) => {
+  .handler(async ({ input: rawInput }) => {
+    const input = rawInput as ApprovalStepsInput;
     if (await hasPendingRequests(input.requestTypeId)) {
       throw new ZSAError(
         "PRECONDITION_FAILED",
