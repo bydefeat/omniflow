@@ -1,4 +1,8 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+
 import { expect, request, test } from "@playwright/test";
+import { uuidv7 } from "uuidv7";
 
 import {
   apiAs,
@@ -67,4 +71,32 @@ test("người duyệt nhận email khi có đơn chờ duyệt", async () => {
   } finally {
     await callAction(employee, "cancelRequest", { requestId });
   }
+});
+
+test("lệnh mail:flush gửi email tồn trong hàng đợi, lỗi SMTP thì hẹn gửi lại", async () => {
+  const root = path.resolve(__dirname, "../..");
+  const flush = (smtp: string) =>
+    execFileSync("npx", ["tsx", "scripts/flush-mail.ts"], {
+      cwd: root,
+      env: { ...process.env, DEFEAT_SMTP_CONNECTION_URL: smtp },
+      encoding: "utf8",
+    });
+
+  const ok = `outbox.ok.${Date.now()}@omniflow.local`;
+  await sql`insert into email_outbox (id, recipient, subject, body) values (${uuidv7()}, ${ok}, 'Kiểm tra outbox', 'Nội dung')`;
+  expect(flush(process.env.DEFEAT_SMTP_CONNECTION_URL!)).toContain("Đã gửi");
+  await waitForMail((m) => m.to.includes(ok));
+  const [sent] = await sql`select sent_at from email_outbox where recipient = ${ok}`;
+  expect(sent.sent_at).not.toBeNull();
+
+  const failing = `outbox.fail.${Date.now()}@omniflow.local`;
+  await sql`insert into email_outbox (id, recipient, subject, body) values (${uuidv7()}, ${failing}, 'Sẽ lỗi', 'Nội dung')`;
+  flush("smtp://127.0.0.1:1");
+  const [row] = await sql`
+    select attempts, last_error, sent_at, next_attempt_at > now() as later from email_outbox where recipient = ${failing}`;
+  expect(row.attempts).toBe(1);
+  expect(row.last_error).toBeTruthy();
+  expect(row.sent_at).toBeNull();
+  expect(row.later).toBe(true);
+  await sql`delete from email_outbox where recipient = ${failing}`;
 });

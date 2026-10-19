@@ -1,5 +1,6 @@
 import {
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -32,4 +33,20 @@ export const notifications = pgTable(
     ...timestamps,
   },
   (t) => [index().on(t.userId, t.readAt)],
+);
+
+export const emailOutbox = pgTable(
+  "email_outbox",
+  {
+    id: id(),
+    recipient: varchar({ length: 320 }).notNull(),
+    subject: varchar({ length: 300 }).notNull(),
+    body: text().notNull(),
+    attempts: integer().notNull().default(0),
+    nextAttemptAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    sentAt: timestamp({ withTimezone: true }),
+    lastError: text(),
+    ...timestamps,
+  },
+  (t) => [index().on(t.sentAt, t.nextAttemptAt)],
 );

@@ -36,6 +36,13 @@
       "when": 1792424463269,
       "tag": "0004_request_more_info",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792425637302,
+      "tag": "0005_email_outbox",
+      "breakpoints": true
     }
   ]
 }

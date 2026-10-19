@@ -12,7 +12,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx --env-file=.env scripts/seed.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
-    "test:e2e": "playwright test -c scripts/e2e"
+    "test:e2e": "playwright test -c scripts/e2e",
+    "mail:flush": "tsx --env-file-if-exists=.env scripts/flush-mail.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",

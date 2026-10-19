@@ -14,7 +14,7 @@ import { FUNCTIONAL_ROLES, ROLES } from "@/shared/constants/role.constant";
 import { ActionError, authedProcedure, roleProcedure } from "@/shared/libs/action.lib";
 import { db } from "@/shared/libs/db.lib";
 import { env } from "@/shared/libs/env.lib";
-import { isMailConfigured, sendMail } from "@/shared/libs/mail.lib";
+import { flushMailOutbox, isMailConfigured, queueMail } from "@/shared/libs/mail.lib";
 
 import { countPendingApprovals, getActorContext } from "./approvals.query";
 import { approvals } from "./approvals.schema";
@@ -94,27 +94,34 @@ async function notify(
   outbox.push({ userIds: unique, title: payload.title, href: payload.href });
 }
 
-async function deliver(outbox: Outbox) {
+async function queueNotificationMails(tx: Tx, outbox: Outbox) {
   if (!isMailConfigured || outbox.length === 0) return;
-  const recipients = await db
+  const recipients = await tx
     .select({ id: user.id, email: user.email, name: user.name })
     .from(user)
     .where(and(inArray(user.id, [...new Set(outbox.flatMap((m) => m.userIds))]), sql`${user.banned} is not true`));
-  for (const message of outbox) {
-    for (const recipient of recipients.filter((r) => message.userIds.includes(r.id))) {
-      void sendMail({
-        to: recipient.email,
-        subject: message.title,
-        text: `Chào ${recipient.name},\n\n${message.title}\n\nXem chi tiết: ${new URL(message.href, env.DEFEAT_BETTER_AUTH_PUBLIC_APPLICATION_BASE_URL)}`,
-      }).catch((error) => console.error("[notify] gửi email thất bại", error));
-    }
-  }
+  await queueMail(
+    tx,
+    outbox.flatMap((message) =>
+      recipients
+        .filter((r) => message.userIds.includes(r.id))
+        .map((recipient) => ({
+          to: recipient.email,
+          subject: message.title,
+          text: `Chào ${recipient.name},\n\n${message.title}\n\nXem chi tiết: ${new URL(message.href, env.DEFEAT_BETTER_AUTH_PUBLIC_APPLICATION_BASE_URL)}`,
+        })),
+    ),
+  );
 }
 
 async function inTransaction<T>(work: (tx: Tx, outbox: Outbox) => Promise<T>) {
-  const outbox: Outbox = [];
-  const result = await db.transaction((tx) => work(tx, outbox));
-  after(() => deliver(outbox).catch((error) => console.error("[notify] không gửi được email", error)));
+  const result = await db.transaction(async (tx) => {
+    const outbox: Outbox = [];
+    const value = await work(tx, outbox);
+    await queueNotificationMails(tx, outbox);
+    return value;
+  });
+  if (isMailConfigured) after(() => flushMailOutbox().catch((error) => console.error("[mail] flush thất bại", error)));
   return result;
 }
 
