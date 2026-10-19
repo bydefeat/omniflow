@@ -46,13 +46,14 @@ async function assign(tx: Tx, step: StepConfig, requester: { id: string; manager
       `Bước "${step.name}" cần quản lý trực tiếp nhưng người làm đơn chưa được gán quản lý. Vui lòng liên hệ quản trị viên.`,
     );
   }
-  const recipients = assignee.approverId
-    ? [assignee.approverId]
-    : await findRoleHolders(tx, assignee.approverRole, requester.id);
+  const recipients =
+    assignee.approverRole === null
+      ? [assignee.approverId]
+      : await findRoleHolders(tx, assignee.approverRole, requester.id);
   if (recipients.length === 0) {
     throw new ZSAError(
       "PRECONDITION_FAILED",
-      `Bước "${step.name}" chưa có ai giữ vai trò ${roleLabel(assignee.approverRole ?? "")}. Vui lòng liên hệ quản trị viên.`,
+      `Bước "${step.name}" chưa có ai giữ vai trò ${roleLabel(step.approverRole ?? "")}. Vui lòng liên hệ quản trị viên.`,
     );
   }
   if (assignee.approverId) {
@@ -321,7 +322,7 @@ export const cancelRequest = authedProcedure
         {
           type: "REQUEST_CANCELLED",
           title: `${request.code} đã bị người đề xuất hủy: ${request.title}`.slice(0, 200),
-          href: `/workspace/approvals/history`,
+          href: `/workspace/approvals/${request.id}`,
         },
       );
     });
