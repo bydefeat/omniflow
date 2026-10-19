@@ -1,6 +1,6 @@
 "use server";
 
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import { requestTypes } from "@/modules/request-types/request-types.schema";
 import { buildFormValidator, type FormField } from "@/modules/request-types/request-types.validation";
@@ -13,7 +13,7 @@ import {
   ATTACHMENT_MAX_COUNT,
   type RequestStatus,
 } from "./requests.constant";
-import { attachments, requestItems, requests } from "./requests.schema";
+import { attachments, requestItems, requestRevisions, requests } from "./requests.schema";
 import { isAllowedAttachmentName, resolveAttachmentType } from "./requests.service";
 import {
   attachmentIdInput,
@@ -177,7 +177,7 @@ async function saveAttachment(requestId: string, file: File, userId: string) {
       const [{ total }] = await tx
         .select({ total: count() })
         .from(attachments)
-        .where(eq(attachments.requestId, draft.id));
+        .where(and(eq(attachments.requestId, draft.id), isNull(attachments.removedAt)));
       if (total >= ATTACHMENT_MAX_COUNT) {
         throw new ActionError("PRECONDITION_FAILED", `Tối đa ${ATTACHMENT_MAX_COUNT} tệp mỗi đơn`);
       }
@@ -212,20 +212,39 @@ export const deleteAttachment = authedProcedure
   .handler(async ({ input, ctx }) => {
     const storageKey = await db.transaction(async (tx) => {
       const [row] = await tx
-        .select({ id: attachments.id, storageKey: attachments.storageKey })
+        .select({
+          id: attachments.id,
+          requestId: attachments.requestId,
+          storageKey: attachments.storageKey,
+          uploadedAt: attachments.uploadedAt,
+        })
         .from(attachments)
         .innerJoin(requests, eq(requests.id, attachments.requestId))
         .where(
           and(
             eq(attachments.id, input.attachmentId),
+            isNull(attachments.removedAt),
             eq(requests.requesterId, ctx.user.id),
             inArray(requests.status, EDITABLE),
           ),
         )
         .for("update", { of: requests });
       if (!row) throw new ActionError("NOT_FOUND", "Không tìm thấy tệp");
+      // A file that was part of a submitted version is evidence: keep it and only hide it from the new version.
+      const [submitted] = await tx
+        .select({ id: requestRevisions.id })
+        .from(requestRevisions)
+        .where(and(eq(requestRevisions.requestId, row.requestId), gte(requestRevisions.createdAt, row.uploadedAt)))
+        .limit(1);
+      if (submitted) {
+        await tx
+          .update(attachments)
+          .set({ removedAt: new Date(), removedById: ctx.user.id })
+          .where(eq(attachments.id, row.id));
+        return null;
+      }
       await tx.delete(attachments).where(eq(attachments.id, row.id));
       return row.storageKey;
     });
-    await deleteStoredFile(storageKey);
+    if (storageKey) await deleteStoredFile(storageKey);
   });

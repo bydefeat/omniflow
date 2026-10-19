@@ -151,7 +151,7 @@ Ngoại lệ: file mà Next.js quy định tên (`proxy.ts`, `layout.tsx`, `page
 | `departments` | PHONG_BAN | `departments` | quản lý phòng ban |
 | `users` | NGUOI_DUNG, VAI_TRO | mở rộng bảng `user` của better-auth: `departmentId`, `managerId`, `status`. Vai trò dùng trường `role` của plugin `admin` | UC-01, quản lý tài khoản |
 | `request-types` | LOAI_YEU_CAU, BUOC_DUYET | `requestTypes`, `approvalSteps` | UC-09, UC-10 |
-| `requests` | DON_YEU_CAU, HANG_MUC_CHI_TIET, TEP_DINH_KEM | `requests`, `requestItems`, `attachments` | UC-02, UC-03 |
+| `requests` | DON_YEU_CAU, HANG_MUC_CHI_TIET, TEP_DINH_KEM | `requests`, `requestItems`, `attachments`, `requestRevisions` (bản chụp nội dung mỗi lần bị trả về bổ sung; tệp đã gửi chỉ gỡ mềm bằng `removedAt`) | UC-02, UC-03 |
 | `approvals` | LUOT_PHE_DUYET | `approvals` | UC-04 → UC-07, chuyển trạng thái đơn |
 | `delegations` | UY_QUYEN | `delegations` | UC-08 |
 | `notifications` | (không có trong CDM, từ UC-01) | `notifications` | UC-01 |

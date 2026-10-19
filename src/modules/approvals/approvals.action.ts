@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, count, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { after } from "next/server";
 
 import { recordAudit } from "@/modules/audit/audit.service";
@@ -8,7 +8,14 @@ import { getActiveDelegates } from "@/modules/delegations/delegations.query";
 import { notifications } from "@/modules/notifications/notifications.schema";
 import { approvalSteps, requestTypes } from "@/modules/request-types/request-types.schema";
 import { buildFormValidator } from "@/modules/request-types/request-types.validation";
-import { requestCounters, requestItems, requests, type RequestSnapshot } from "@/modules/requests/requests.schema";
+import {
+  attachments,
+  requestCounters,
+  requestItems,
+  requestRevisions,
+  requests,
+  type RequestSnapshot,
+} from "@/modules/requests/requests.schema";
 import { formatRequestCode } from "@/modules/requests/requests.service";
 import { user } from "@/modules/users/users.schema";
 import { FUNCTIONAL_ROLES, ROLES } from "@/shared/constants/role.constant";
@@ -372,6 +379,36 @@ export const rejectRequest = authedProcedure
     });
   });
 
+async function saveRevision(tx: Tx, requestId: string) {
+  const [[content], items, files, [{ last }]] = await Promise.all([
+    tx
+      .select({ title: requests.title, reason: requests.reason, formData: requests.formData, totalAmount: requests.totalAmount })
+      .from(requests)
+      .where(eq(requests.id, requestId)),
+    tx
+      .select({
+        name: requestItems.name,
+        unit: requestItems.unit,
+        quantity: requestItems.quantity,
+        unitPrice: requestItems.unitPrice,
+        amount: requestItems.amount,
+      })
+      .from(requestItems)
+      .where(eq(requestItems.requestId, requestId))
+      .orderBy(asc(requestItems.sortOrder)),
+    tx
+      .select({ id: attachments.id, fileName: attachments.fileName, sizeBytes: attachments.sizeBytes })
+      .from(attachments)
+      .where(and(eq(attachments.requestId, requestId), isNull(attachments.removedAt)))
+      .orderBy(asc(attachments.uploadedAt)),
+    tx
+      .select({ last: sql<number>`coalesce(max(${requestRevisions.revision}), 0)::int` })
+      .from(requestRevisions)
+      .where(eq(requestRevisions.requestId, requestId)),
+  ]);
+  await tx.insert(requestRevisions).values({ requestId, revision: last + 1, ...content, items, attachments: files });
+}
+
 export const returnRequest = authedProcedure
   .createServerAction()
   .input(returnInput)
@@ -382,6 +419,7 @@ export const returnRequest = authedProcedure
         .update(approvals)
         .set({ result: "RETURNED", actedById: ctx.user.id, onBehalfOfId, comment: input.comment, decidedAt: new Date() })
         .where(and(eq(approvals.id, row.id), eq(approvals.result, "WAITING")));
+      await saveRevision(tx, row.requestId);
       await tx.update(requests).set({ status: "NEEDS_INFO" }).where(eq(requests.id, row.requestId));
       await notify(tx, outbox, [row.requesterId], {
         type: "REQUEST_RETURNED",
