@@ -85,3 +85,13 @@ test("trang có header bảo mật chống nhúng khung và lộ thông tin", as
   expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
   expect(headers["x-powered-by"]).toBeUndefined();
 });
+
+test("trang không tồn tại hiện thông báo tiếng Việt và vẫn giữ khung portal", async ({ browser }) => {
+  const page = await pageAs(browser, "employee");
+  await page.goto("/workspace/requests/khong-ton-tai");
+  await expect(page.getByText("Không tìm thấy trang")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Về trang chính" })).toBeVisible();
+  await page.goto("/khong-co-trang-nay");
+  await expect(page.getByText("Không tìm thấy trang")).toBeVisible();
+  await page.context().close();
+});

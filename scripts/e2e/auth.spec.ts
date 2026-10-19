@@ -69,7 +69,7 @@ test("không có luồng đăng ký: API sign-up bị chặn, không có trang h
   expect(await sql`select id from "user" where email = ${email}`).toHaveLength(0);
 
   await page.goto("/authentication/sign-up");
-  await expect(page.getByText(/404|could not be found/i).first()).toBeVisible();
+  await expect(page.getByText("Không tìm thấy trang")).toBeVisible();
 
   await page.goto("/authentication/sign-in");
   await expect(page.getByRole("button", { name: "Đăng nhập" })).toBeVisible();
