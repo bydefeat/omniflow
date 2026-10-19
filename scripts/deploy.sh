@@ -17,7 +17,7 @@ umask 027
 APP_ROOT="${APP_ROOT:-/opt/omniflow}"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 SERVICE="${SERVICE:-omniflow}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:3000/api/health}"
+CHECK_URL="${CHECK_URL:-http://127.0.0.1:3000/authentication/sign-in}"
 
 restart() {
   if ! systemctl cat "$SERVICE" >/dev/null 2>&1; then
@@ -26,13 +26,13 @@ restart() {
   fi
   sudo systemctl restart "$SERVICE"
   for _ in $(seq 1 30); do
-    if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+    if curl -fsS -o /dev/null "$CHECK_URL" 2>/dev/null; then
       echo "Ứng dụng đã sẵn sàng: $(readlink -f "$APP_ROOT/current")"
       return 0
     fi
     sleep 2
   done
-  echo "Ứng dụng không trả lời $HEALTH_URL sau 60 giây. Xem: journalctl -u $SERVICE -n 100" >&2
+  echo "Ứng dụng không trả lời $CHECK_URL sau 60 giây. Xem: journalctl -u $SERVICE -n 100" >&2
   return 1
 }
 

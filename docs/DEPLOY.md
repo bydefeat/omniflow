@@ -95,8 +95,6 @@ sudo systemctl enable --now omniflow omniflow-mail.timer omniflow-backup.timer
 
 Xem log: `journalctl -u omniflow -f`. Ở production mỗi dòng log của ứng dụng là một object JSON (`time`, `level`, `message` và các trường khác), lọc được bằng `journalctl -u omniflow -o cat | jq 'select(.level == "error")'`.
 
-Kiểm tra sống: `curl -fsS http://127.0.0.1:3000/api/health` trả `{"status":"ok"}` khi kết nối được database, HTTP 503 nếu không. Dùng được cho giám sát (Uptime Kuma, healthchecks...).
-
 ## 6. nginx và HTTPS
 
 ```bash
@@ -129,7 +127,7 @@ sudo -u omniflow /opt/omniflow/current/scripts/deploy.sh            # bản mớ
 sudo -u omniflow /opt/omniflow/current/scripts/deploy.sh v1.2.0     # hoặc một tag/commit cụ thể
 ```
 
-Script làm theo thứ tự: tạo `releases/<thời điểm>` từ commit được chọn → `npm ci` → `npm run build` → sao lưu → `db:migrate` → chuyển `current` → khởi động lại → chờ `/api/health` trả OK. Lỗi ở bước nào trước khi chuyển `current` thì bản đang chạy giữ nguyên và release lỗi bị xóa. Giữ 5 release gần nhất.
+Script làm theo thứ tự: tạo `releases/<thời điểm>` từ commit được chọn → `npm ci` → `npm run build` → sao lưu → `db:migrate` → chuyển `current` → khởi động lại → chờ trang đăng nhập trả lời. Lỗi ở bước nào trước khi chuyển `current` thì bản đang chạy giữ nguyên và release lỗi bị xóa. Giữ 5 release gần nhất.
 
 Quay về bản trước: `sudo -u omniflow /opt/omniflow/current/scripts/deploy.sh --rollback`. Migration đã chạy không được hoàn tác, nên chỉ rollback khi bản mới không đổi schema hoặc chỉ thêm bảng/cột (bản cũ bỏ qua được).
 

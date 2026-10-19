@@ -97,13 +97,6 @@ test("trang không tồn tại hiện thông báo tiếng Việt và vẫn giữ
   await page.context().close();
 });
 
-test("health check báo database sẵn sàng, không cần đăng nhập và không bị cache", async ({ request }) => {
-  const response = await request.get("/api/health");
-  expect(response.status()).toBe(200);
-  expect(await response.json()).toEqual({ status: "ok" });
-  expect(response.headers()["cache-control"]).toContain("no-store");
-});
-
 test("trang có tiêu đề riêng và trang quản trị có chuông thông báo", async ({ browser }) => {
   const page = await pageAs(browser, "admin");
   await page.goto("/administrator/users");

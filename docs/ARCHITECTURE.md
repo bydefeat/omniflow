@@ -73,7 +73,6 @@ src/
 │   │       └── audit-log/           # nhật ký thao tác quản trị (ai, lúc nào, đổi gì, IP)
 │   │
 │   └── api/
-│       ├── health/route.ts          # ping database cho giám sát / script deploy
 │       ├── auth/[...all]/route.ts   # handler của better-auth
 │       └── files/[fileId]/route.ts  # tải tệp đính kèm, kiểm tra quyền trước khi trả file
 │

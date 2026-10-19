@@ -26,7 +26,7 @@ Không có đăng ký tài khoản: mọi tài khoản do quản trị viên c�
 - Kiểm tra quyền ở từng trang và từng server action; header bảo mật (CSP `frame-ancestors`, `nosniff`, HSTS khi chạy HTTPS).
 - Mật khẩu tối thiểu 10 ký tự gồm chữ và số; khóa tạm 15 phút sau 5 lần đăng nhập sai; giới hạn tần suất theo IP.
 - Hàng đợi email trong database (gửi lại khi SMTP lỗi), tệp lưu trên đĩa hoặc S3/Cloudflare R2.
-- `/api/health`, log JSON, script triển khai theo release có rollback, sao lưu hằng ngày.
+- Log JSON, script triển khai theo release có rollback, sao lưu hằng ngày.
 
 ## Công nghệ
 
