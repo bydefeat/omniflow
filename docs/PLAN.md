@@ -198,20 +198,28 @@ Index: (`userId`, `readAt`).
 
 **Đã kiểm:** `npm run build`, `tsc --noEmit`, `npm run lint` đều qua; truy vấn qua `db.lib.ts` chạy được.
 
-### Giai đoạn 2 — Xác thực và phân quyền
+### Giai đoạn 2 — Xác thực và phân quyền ✅ (2026-10-19)
 
-- [ ] `src/shared/constants/role.constant.ts`: `employee`, `approver`, `admin` + danh sách vai trò chức năng (G2) + trang đích sau đăng nhập
-- [ ] `src/shared/libs/auth.lib.ts`: `betterAuth()` với drizzle adapter, `emailAndPassword` (tắt tự đăng ký), plugin `admin`, `user.additionalFields` (`employeeCode`, `departmentId`, `managerId`); truyền `secret`, `baseURL` từ env
-- [x] Bảng auth đã viết tay ở `src/modules/users/users.schema.ts` (giai đoạn 1); khi cấu hình xong `auth.lib.ts` chạy `npx @better-auth/cli generate` để so, lệch thì sửa schema
-- [ ] `src/shared/libs/auth-client.lib.ts`, `src/app/api/auth/[...all]/route.ts`
-- [ ] `src/shared/libs/session.lib.ts`: `getSession()`, `requireRole(role)` (không có session → sign-in; sai role → 403)
-- [ ] `src/shared/libs/action.lib.ts`: `authedProcedure`, `roleProcedure(role)` bằng `createServerActionProcedure`; tài khoản bị khóa thì chặn
-- [ ] `src/proxies/authentication.proxy.ts` + `src/proxy.ts`
-- [ ] `src/shared/components/layouts/authentication/` và các trang sign-in, forgot-password, reset-password
-- [ ] `src/app/page.tsx`: redirect theo role (bọc `<Suspense>` vì `cacheComponents`)
-- [ ] Script seed `scripts/seed.ts`: một phòng ban, một tài khoản admin từ biến môi trường
+- [x] `role.constant.ts` (`employee`, `approver`, `admin`, 4 vai trò chức năng, nhãn tiếng Việt, trang đích) + `role.lib.ts` (`parseRoles`, `hasRole`, `getHomePath`, `safeCallbackPath` chống open redirect)
+- [x] `auth.lib.ts`: drizzle adapter, id `uuidv7`, `emailAndPassword` (tắt tự đăng ký, tối thiểu 8 ký tự, đặt lại mật khẩu thì thu hồi mọi phiên), `additionalFields`, plugin `admin` (role mặc định `employee`), `nextCookies`
+- [x] Bảng auth viết tay ở `users.schema.ts` khớp với better-auth: seed và đăng nhập ghi/đọc đúng
+- [x] `auth-client.lib.ts` (kèm `adminClient`), route `api/auth/[...all]`
+- [x] `session.lib.ts`: `getSession()` (cache theo request), `requireSession()`, `requireRole()` → `forbidden()`; bật `experimental.authInterrupts`, thêm `app/forbidden.tsx`
+- [x] `action.lib.ts`: `authedProcedure` (`NOT_AUTHORIZED`), `roleProcedure(role)` (`FORBIDDEN`)
+- [x] `src/proxy.ts` + `authentication.proxy.ts`: không có cookie phiên → sign-in kèm `callbackURL`. Không đẩy người có cookie ra khỏi trang đăng nhập (cookie hết hạn sẽ gây vòng lặp); trang sign-in tự kiểm tra phiên thật
+- [x] `AuthenticationLayout` + trang sign-in, forgot-password, reset-password; form ở `modules/users/components/`
+- [x] `app/page.tsx`: chuyển hướng theo role
+- [x] `scripts/seed.ts` (`npm run db:seed`): phòng ban `PB_BGD` + admin (`employee,admin`) từ `DEFEAT_SEED_ADMIN_*`, chạy lại không tạo trùng
+- [x] Layout tạm cho `/workspace` và `/administrator` (chỉ `requireRole`), giai đoạn 3 thay bằng layout thật
 
-**Xong khi:** đăng nhập admin seed → vào `/administrator`; chưa đăng nhập vào `/workspace/...` → về sign-in; tài khoản thường vào `/administrator` → 403; gọi action admin bằng tài khoản thường → lỗi `NOT_AUTHORIZED`.
+**Đã kiểm trên production build** (`npm start` + curl): chưa đăng nhập → 307 về sign-in kèm `callbackURL`; admin vào `/administrator` được, `/` chuyển về `/administrator`; nhân viên vào `/administrator` → trang 403, gọi API admin → 403; khóa nhân viên → mọi phiên bị xóa, phiên cũ bị đẩy về sign-in, đăng nhập lại → `BANNED_USER`; `callbackURL=//evil.com` bị bỏ qua.
+
+**Ghi chú:**
+- Với Cache Components, `redirect()`/`forbidden()` chạy trong phần stream nên mã HTTP vẫn là 200; nội dung trả về là trang 403 hoặc lệnh chuyển hướng, không lộ dữ liệu.
+- Chưa có email (G7): `sendResetPassword` chỉ in liên kết đặt lại ra log server. Khi có dịch vụ email thì thay ở `auth.lib.ts`.
+- `roleProcedure` chưa thử qua action thật; sẽ thử khi có action đầu tiên ở giai đoạn 4.
+- Kiểu `role` của better-auth chỉ nhận `user`/`admin`, nên khi tạo người dùng truyền role qua `data.role` (xem `seed.ts`).
+- Lỗi build hay gặp: icon `@ant-design/icons` chỉ dùng được trong component có `"use client"`; không dùng `new Date()`/`Math.random()` lúc render ở server component.
 
 ### Giai đoạn 3 — Layouts
 

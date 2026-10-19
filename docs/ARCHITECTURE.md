@@ -106,7 +106,8 @@ src/
     │   ├── schema.lib.ts            # helper cột dùng chung cho *.schema.ts: id() (uuidv7), timestamps
     │   ├── auth.lib.ts              # betterAuth() (server)
     │   ├── auth-client.lib.ts       # createAuthClient() (client)
-    │   ├── session.lib.ts           # getSession(), requireRole()
+    │   ├── session.lib.ts           # getSession(), requireSession(), requireRole() → forbidden()
+    │   ├── role.lib.ts              # parseRoles(), hasRole(), getHomePath(), safeCallbackPath()
     │   ├── action.lib.ts            # ZSA procedure: authedProcedure, roleProcedure(role)
     │   ├── query-client.lib.ts      # tạo QueryClient (TanStack Query)
     │   └── storage.lib.ts           # lưu / đọc file đính kèm
