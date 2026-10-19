@@ -141,13 +141,11 @@ test("form đăng nhập báo khóa tạm bằng tiếng Việt", async ({ page 
     await page.goto("/authentication/sign-in");
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Mật khẩu").fill(USERS.ceo.password);
-    // The previous test exhausts better-auth's per-IP limiter (3 sign-ins / 10 s); retry until it resets.
-    await expect(async () => {
-      await page.getByRole("button", { name: "Đăng nhập" }).click();
-      await expect(page.getByText(/Đăng nhập sai quá 5 lần\. Vui lòng thử lại sau \d+ phút\./)).toBeVisible({
-        timeout: 3_000,
-      });
-    }).toPass({ intervals: [11_000], timeout: 45_000 });
+    // Earlier sign-ins in the run fill better-auth's per-IP limiter (rate_limit table); reset it so the
+    // request reaches our lockout check instead of the generic 429.
+    await sql`delete from rate_limit where key like ${"%/sign-in/email"}`;
+    await page.getByRole("button", { name: "Đăng nhập" }).click();
+    await expect(page.getByText(/Đăng nhập sai quá 5 lần\. Vui lòng thử lại sau \d+ phút\./)).toBeVisible();
   } finally {
     await sql`delete from sign_in_failures where email = ${email}`;
   }
