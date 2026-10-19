@@ -133,19 +133,24 @@ test("đăng nhập sai 5 lần thì tài khoản bị khóa tạm, admin đặt
 
 test("form đăng nhập báo khóa tạm bằng tiếng Việt", async ({ page }) => {
   const email = USERS.ceo.email;
-  await sql`
-    insert into sign_in_failures (email, ip_address, failures, first_failed_at)
-    select ${email}, ip, 6, now() from unnest(array['', '127.0.0.1', '::1']) as ip
-    on conflict (email, ip_address) do update set failures = 6, first_failed_at = now()`;
+  // Earlier sign-ins in the run fill better-auth's per-IP limiter (rate_limit table); reset it so each
+  // request reaches our lockout check instead of the generic 429.
+  const resetIpLimiter = () => sql`delete from rate_limit where key like ${"%/sign-in/email"}`;
   try {
     await page.goto("/authentication/sign-in");
     await page.getByLabel("Email").fill(email);
+    // One real wrong attempt records the counter under whatever client IP the server sees for this browser.
+    await resetIpLimiter();
+    await page.getByLabel("Mật khẩu").fill("Sai@matkhau123");
+    await page.getByRole("button", { name: "Đăng nhập" }).click();
+    await expect(page.getByText("Email hoặc mật khẩu không đúng.")).toBeVisible();
+    await sql`update sign_in_failures set failures = 5 where email = ${email}`;
+
+    await resetIpLimiter();
     await page.getByLabel("Mật khẩu").fill(USERS.ceo.password);
-    // Earlier sign-ins in the run fill better-auth's per-IP limiter (rate_limit table); reset it so the
-    // request reaches our lockout check instead of the generic 429.
-    await sql`delete from rate_limit where key like ${"%/sign-in/email"}`;
     await page.getByRole("button", { name: "Đăng nhập" }).click();
     await expect(page.getByText(/Đăng nhập sai quá 5 lần\. Vui lòng thử lại sau \d+ phút\./)).toBeVisible();
+    await expect(page).toHaveURL(/\/authentication\/sign-in/);
   } finally {
     await sql`delete from sign_in_failures where email = ${email}`;
   }
