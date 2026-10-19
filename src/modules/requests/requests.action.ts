@@ -13,9 +13,9 @@ import { deleteStoredFile, saveFile } from "@/shared/libs/storage.lib";
 import {
   ATTACHMENT_MAX_BYTES,
   ATTACHMENT_MAX_COUNT,
-  ATTACHMENT_MIME_TYPES,
 } from "./requests.constant";
 import { attachments, requestItems, requests } from "./requests.schema";
+import { isAllowedAttachmentName, resolveAttachmentType } from "./requests.service";
 import {
   attachmentIdInput,
   attachmentUploadInput,
@@ -43,7 +43,12 @@ async function loadActiveType(requestTypeId: string) {
 function parseDraftFormData(type: Awaited<ReturnType<typeof loadActiveType>>, formData: Record<string, unknown>) {
   const parsed = buildFormValidator(type.formSchema, { partial: true }).safeParse(formData);
   if (!parsed.success) {
-    throw new ZSAError("UNPROCESSABLE_CONTENT", "Dữ liệu biểu mẫu không hợp lệ");
+    const issue = parsed.error.issues[0];
+    const field = type.formSchema.find((f) => f.key === issue?.path[0]);
+    throw new ZSAError(
+      "UNPROCESSABLE_CONTENT",
+      field ? `Trường "${field.label}" không hợp lệ: ${issue.message}` : "Dữ liệu biểu mẫu không hợp lệ",
+    );
   }
   return parsed.data as Record<string, unknown>;
 }
@@ -169,12 +174,17 @@ async function saveAttachment(requestId: string, file: File, userId: string) {
   if (file.size > ATTACHMENT_MAX_BYTES) {
     throw new ZSAError("PAYLOAD_TOO_LARGE", "Tệp vượt quá 10 MB");
   }
-  if (!ATTACHMENT_MIME_TYPES.includes(file.type)) {
+  if (!isAllowedAttachmentName(file.name)) {
     throw new ZSAError("UNPROCESSABLE_CONTENT", "Chỉ nhận PDF, ảnh, Word hoặc Excel");
   }
   await findOwnDraft(db, requestId, userId);
 
-  const storageKey = await saveFile(new Uint8Array(await file.arrayBuffer()));
+  const data = new Uint8Array(await file.arrayBuffer());
+  const mimeType = resolveAttachmentType(data, file.name);
+  if (!mimeType) {
+    throw new ZSAError("UNPROCESSABLE_CONTENT", "Nội dung hoặc đuôi tệp không khớp với định dạng PDF, ảnh, Word hoặc Excel");
+  }
+  const storageKey = await saveFile(data);
   try {
     return await db.transaction(async (tx) => {
       const draft = await findOwnDraft(tx, requestId, userId, true);
@@ -191,7 +201,7 @@ async function saveAttachment(requestId: string, file: File, userId: string) {
           requestId: draft.id,
           fileName: file.name.slice(0, 255),
           storageKey,
-          mimeType: file.type,
+          mimeType,
           sizeBytes: file.size,
           uploadedById: userId,
         })

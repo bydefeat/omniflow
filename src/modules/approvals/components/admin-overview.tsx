@@ -11,7 +11,7 @@ import type { UnassignableApprovalRow } from "../approvals.query";
 type Props = {
   pending: number;
   overdue: number;
-  byApprover: { name: string; total: number }[];
+  byApprover: { id: string; name: string; code: string; total: number }[];
   byRole: { role: string | null; total: number }[];
   unassignable: UnassignableApprovalRow[];
   counts: { users: number; departments: number; activeTypes: number };
@@ -19,7 +19,7 @@ type Props = {
 
 export function AdminOverview({ pending, overdue, byApprover, byRole, unassignable, counts }: Props) {
   const queue = [
-    ...byApprover.map((r) => ({ key: `u-${r.name}`, name: r.name, total: r.total })),
+    ...byApprover.map((r) => ({ key: `u-${r.id}`, name: `${r.name} (${r.code})`, total: r.total })),
     ...byRole.map((r) => ({
       key: `r-${r.role}`,
       name: `Nhóm ${ROLE_LABELS[r.role as keyof typeof ROLE_LABELS] ?? r.role}`,

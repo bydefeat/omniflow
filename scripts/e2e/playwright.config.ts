@@ -4,6 +4,7 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 export default defineConfig({
   testDir: ".",
+  globalSetup: "./global-setup.ts",
   outputDir: "../../test-results/e2e",
   fullyParallel: false,
   workers: 1,

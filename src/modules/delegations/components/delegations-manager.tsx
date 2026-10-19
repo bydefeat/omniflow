@@ -26,9 +26,10 @@ type Props = {
   given: DelegationRow[];
   received: DelegationRow[];
   candidates: UserOption[];
+  canCreate: boolean;
 };
 
-export function DelegationsManager({ given, received, candidates }: Props) {
+export function DelegationsManager({ given, received, candidates, canCreate }: Props) {
   const router = useRouter();
   const { message } = App.useApp();
   const [form] = Form.useForm<Values>();
@@ -96,36 +97,40 @@ export function DelegationsManager({ given, received, candidates }: Props) {
       />
 
       <div className="space-y-6">
-        <Card title="Tạo ủy quyền mới">
-          <Form<Values> form={form} layout="vertical" requiredMark={false} onFinish={create}>
-            <div className="grid gap-x-4 md:grid-cols-2">
-              <Form.Item name="delegateId" label="Người được ủy quyền" rules={[{ required: true, message: "Vui lòng chọn người" }]}>
-                <Select
-                  showSearch={{ optionFilterProp: "label" }}
-                  options={candidates.map((u) => ({ value: u.id, label: `${u.name} (${u.employeeCode})` }))}
-                />
+        {canCreate && (
+          <Card title="Tạo ủy quyền mới">
+            <Form<Values> form={form} layout="vertical" requiredMark={false} onFinish={create}>
+              <div className="grid gap-x-4 md:grid-cols-2">
+                <Form.Item name="delegateId" label="Người được ủy quyền" rules={[{ required: true, message: "Vui lòng chọn người" }]}>
+                  <Select
+                    showSearch={{ optionFilterProp: "label" }}
+                    options={candidates.map((u) => ({ value: u.id, label: `${u.name} (${u.employeeCode})` }))}
+                  />
+                </Form.Item>
+                <Form.Item name="range" label="Thời gian hiệu lực" rules={[{ required: true, message: "Vui lòng chọn thời gian" }]}>
+                  <DatePicker.RangePicker
+                    showTime={{ format: "HH:mm" }}
+                    format="DD/MM/YYYY HH:mm"
+                    className="w-full"
+                    disabledDate={(d) => d.isBefore(dayjs().startOf("day"))}
+                  />
+                </Form.Item>
+              </div>
+              <Form.Item name="reason" label="Lý do" rules={[{ required: true, whitespace: true, message: "Vui lòng nhập lý do" }]}>
+                <Input maxLength={255} placeholder="Đi công tác nước ngoài, nghỉ phép..." />
               </Form.Item>
-              <Form.Item name="range" label="Thời gian hiệu lực" rules={[{ required: true, message: "Vui lòng chọn thời gian" }]}>
-                <DatePicker.RangePicker
-                  showTime={{ format: "HH:mm" }}
-                  format="DD/MM/YYYY HH:mm"
-                  className="w-full"
-                  disabledDate={(d) => d.isBefore(dayjs().startOf("day"))}
-                />
-              </Form.Item>
-            </div>
-            <Form.Item name="reason" label="Lý do" rules={[{ required: true, whitespace: true, message: "Vui lòng nhập lý do" }]}>
-              <Input maxLength={255} placeholder="Đi công tác nước ngoài, nghỉ phép..." />
-            </Form.Item>
-            <Button type="primary" htmlType="submit" loading={saving}>
-              Tạo ủy quyền
-            </Button>
-          </Form>
-        </Card>
+              <Button type="primary" htmlType="submit" loading={saving}>
+                Tạo ủy quyền
+              </Button>
+            </Form>
+          </Card>
+        )}
 
-        <Card title="Tôi đã ủy quyền">
-          <Table rowKey="id" size="small" dataSource={given} columns={columns(true)} pagination={false} scroll={{ x: 800 }} />
-        </Card>
+        {(canCreate || given.length > 0) && (
+          <Card title="Tôi đã ủy quyền">
+            <Table rowKey="id" size="small" dataSource={given} columns={columns(true)} pagination={false} scroll={{ x: 800 }} />
+          </Card>
+        )}
 
         <Card title="Tôi được ủy quyền">
           <Table rowKey="id" size="small" dataSource={received} columns={columns(false)} pagination={false} scroll={{ x: 800 }} />

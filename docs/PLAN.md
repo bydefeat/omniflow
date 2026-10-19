@@ -36,8 +36,8 @@ Các chỗ thiếu trong `docs.md` (xem `ARCHITECTURE.md` mục 6) tạm chốt 
 | G4 | Hủy được khi `DRAFT` hoặc `PENDING` (kể cả đã có cấp duyệt) |
 | G5 | Ủy quyền có người ủy quyền và người được ủy quyền; xét lúc đọc/duyệt. Một người không có hai ủy quyền `ACTIVE` chồng thời gian |
 | G6 | Khóa tài khoản (`LOCKED`) dùng `banned` của plugin `admin` better-auth, không thêm cột `status` riêng |
-| G7 | Thông báo duyệt chỉ trong ứng dụng. Email chỉ dùng cho đặt lại mật khẩu, gửi qua SMTP khi có `DEFEAT_SMTP_CONNECTION_URL` |
-| G8 | Tệp đính kèm lưu ổ đĩa local (`uploads/`, đã gitignore); tối đa 10 MB/tệp, chỉ PDF, ảnh, Excel, Word |
+| G7 | Thông báo luôn có trong ứng dụng. Khi có `DEFEAT_SMTP_CONNECTION_URL` thì gửi thêm email (đặt lại mật khẩu, mọi thông báo duyệt), gửi sau khi transaction commit |
+| G8 | Tệp đính kèm lưu ổ đĩa local (`uploads/`, đã gitignore), hoặc S3/R2/MinIO khi có `DEFEAT_S3_BUCKET_NAME`; tối đa 10 MB/tệp, chỉ PDF, ảnh, Excel, Word, kiểm tra cả đuôi tệp và chữ ký nội dung (chấp nhận cả `.xls` dạng HTML/XML do ERP xuất, `.doc` dạng RTF); loại MIME lưu theo đuôi tệp, không tin trình duyệt |
 | G9 | SLA chỉ để báo cáo và tô màu quá hạn; không tự động chuyển cấp hay nhắc nhở |
 
 ## 2. Thiết kế database (PDM)
@@ -322,7 +322,7 @@ Kiểm thử đầu-cuối tìm ra và đã sửa 3 lỗi: zsa `type: "formData"
 
 ### 4.1. E2E trong repo (`scripts/e2e/`, Playwright)
 
-Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` → `npm run test:e2e` (tự `npm start` nếu cổng 3000 trống). Trình duyệt có sẵn thì truyền `E2E_CHROMIUM_PATH`. 23/23 qua trên DB dựng lại từ đầu:
+Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` → `npm run test:e2e` (tự `npm start` nếu cổng 3000 trống). Trình duyệt có sẵn thì truyền `E2E_CHROMIUM_PATH`. Đặt `DEFEAT_SMTP_CONNECTION_URL=smtp://127.0.0.1:2525` (cho cả server và lệnh test) thì e2e tự bật SMTP sink và chạy thêm test email; đặt các biến `DEFEAT_S3_*` thì chạy trên S3 (CI dùng moto). Kết quả: 29 qua + 1 bỏ qua khi có SMTP và S3; 28 qua + 2 bỏ qua ở cấu hình mặc định. CI (`.github/workflows/ci.yml`) chạy lint, tsc, unit test và e2e với Postgres, moto và SMTP sink cho mỗi PR.
 
 | File | Nội dung |
 |---|---|
@@ -330,9 +330,12 @@ Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` �
 | `request-flow.spec.ts` | Trên trình duyệt: lưu nháp khi dòng hạng mục trống, số lượng `2,5` × `1.500.000` = 3.750.000 khớp DB, upload PDF, gửi, 3 người duyệt qua UI. Đơn đang chờ không đổi khi admin sửa biểu mẫu / tắt hạng mục; sửa bước bị chặn |
 | `concurrency.spec.ts` | Giữ khóa dòng để tái hiện chính xác: sửa nháp / xóa nháp / xóa tệp / sửa bước duyệt trùng lúc gửi đơn đều bị chặn; duyệt và hủy cùng lúc không lỗi server. Đã thử gỡ khóa trong code thì các test tương ứng fail |
 | `reassign.spec.ts` | Khóa người giữ vai trò duy nhất → tổng quan admin báo lượt treo → giao lại qua UI → người mới nhận thông báo và duyệt được; hủy đơn báo cho người giữ vai trò và người được họ ủy quyền |
-| `mobile.spec.ts` | 8 trang workspace ở 390×844: không tràn ngang, thanh tab đáy hiển thị |
+| `mobile.spec.ts` | 8 trang workspace ở 390×844: không tràn ngang, thanh tab đáy hiển thị; "Đơn chờ tôi duyệt" hiện dạng thẻ dưới 768px |
+| `drag-drop.spec.ts` | Kéo thả bằng chuột đổi thứ tự trường biểu mẫu và bước duyệt, lưu đúng thứ tự vào DB |
+| `mail.spec.ts` | Quên mật khẩu → email thật tới SMTP sink → mở liên kết → đặt mật khẩu mới → đăng nhập được; người duyệt nhận email khi có đơn chờ |
+| `followups.spec.ts` | Người chỉ được ủy quyền vào trang ủy quyền; người ủy quyền thấy lượt được duyệt thay trong lịch sử; nháp cũ lưu được sau khi biểu mẫu đổi; tệp giả PDF bị từ chối; lỗi rõ cho id không tồn tại, phòng ban sai, quản lý bị khóa |
 
-**Chưa kiểm:** kéo thả (form builder, bước duyệt) trên trình duyệt thật; portal admin trên điện thoại (thiết kế cho máy tính). Bảng "Đơn chờ tôi duyệt" trên điện thoại cuộn ngang trong bảng, chưa có dạng thẻ.
+**Chưa kiểm:** portal admin trên điện thoại (thiết kế cho máy tính); gửi email qua dịch vụ SMTP thật và S3 thật (đã kiểm với SMTP sink và moto).
 
 ## 5. Rủi ro và lưu ý
 
@@ -341,9 +344,9 @@ Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` �
 | zsa 0.6 viết cho zod 3 | Input JSON chạy được; input `formData` hỏng nên đã tránh. Action có schema `.refine()` lồng trong mảng thì zsa không suy được kiểu `input` → ép kiểu bằng `z.infer` (xem `request-types.action.ts`, `delegations.action.ts`). Muốn bỏ zsa thì chỉ sửa `action.lib.ts` và các `*.action.ts` |
 | Server component dùng component antd | Chỉ dùng export có tên (`Button`, `Tag`); **không** dùng `X.Y` (`Layout.Content`, `Descriptions.Item`...) và không dùng icon trong server component — đặt chúng trong component `"use client"` |
 | `cacheComponents` | Không dùng `new Date()` / `Math.random()` khi render ở phần tĩnh; `next dev` có cảnh báo "uncached data" ở layout portal (đọc session ngoài `<Suspense>` của segment) — không chặn build, xử lý sau nếu cần điều hướng tức thì |
-| Rate limit đăng nhập của better-auth (production) | Đúng ý đồ bảo mật; script tự động cần đợi rồi thử lại |
+| Rate limit đăng nhập của better-auth (production) | Lưu trong bảng `rate_limit` nên có hiệu lực chung khi chạy nhiều instance; script tự động cần đợi rồi thử lại. Chạy sau nhiều tầng proxy thì cấu hình `advanced.ipAddress` trong `auth.lib.ts` theo hạ tầng, nếu không mọi người dùng có thể dùng chung một hạn mức |
 | Danh sách người dùng / đơn lọc phía client | Đủ cho vài nghìn dòng; lớn hơn thì chuyển sang phân trang và lọc ở server (query nhận tham số từ `searchParams`) |
 | Đếm "chờ tôi duyệt" chạy lại cả truy vấn danh sách | Đủ ở quy mô nội bộ; chậm thì viết truy vấn `count` riêng |
-| Lưu tệp trên ổ đĩa local (`uploads/`) | Không dùng được khi chạy nhiều instance; `storage.lib.ts` là chỗ duy nhất đọc/ghi, chuyển S3/R2 chỉ sửa file này |
-| Email (G7) | Chỉ có email đặt lại mật khẩu (cần cấu hình SMTP). Muốn gửi email thông báo duyệt thì gọi `sendMail()` trong `notify()` ở `approvals.action.ts` |
+| Lưu tệp | Mặc định ổ đĩa local (`uploads/`), không dùng được khi chạy nhiều instance; đặt `DEFEAT_S3_*` để dùng S3/R2/MinIO (`storage.lib.ts`) |
+| Email (G7) | Gửi không chờ (không lộ email nào có tài khoản, không làm chậm thao tác duyệt); lỗi gửi chỉ ghi log, không có hàng đợi gửi lại |
 | Giả định G1–G9 | Vẫn cần chốt với người viết `docs.md`; schema đang theo các giả định này |

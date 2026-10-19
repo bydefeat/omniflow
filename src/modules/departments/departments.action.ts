@@ -42,11 +42,13 @@ export const updateDepartment = adminProcedure
   .createServerAction()
   .input(departmentUpdateInput)
   .handler(async ({ input: { id, ...values } }) => {
-    await db
+    const updated = await db
       .update(departments)
       .set(values)
       .where(eq(departments.id, id))
+      .returning({ id: departments.id })
       .catch(translate);
+    if (updated.length === 0) throw new ZSAError("NOT_FOUND", "Không tìm thấy phòng ban");
   });
 
 export const deleteDepartment = adminProcedure

@@ -56,16 +56,18 @@ async function ensureRequestType(input: {
   const [existing] = await db.select().from(requestTypes).where(eq(requestTypes.code, input.code));
   if (existing) return;
   const { steps, ...values } = input;
-  const [created] = await db.insert(requestTypes).values(values).returning();
-  await db.insert(approvalSteps).values(
-    steps.map((step, index) => ({
-      requestTypeId: created.id,
-      stepOrder: index + 1,
-      name: step.name,
-      approverType: step.approverType,
-      approverRole: step.approverRole ?? null,
-    })),
-  );
+  await db.transaction(async (tx) => {
+    const [created] = await tx.insert(requestTypes).values(values).returning();
+    await tx.insert(approvalSteps).values(
+      steps.map((step, index) => ({
+        requestTypeId: created.id,
+        stepOrder: index + 1,
+        name: step.name,
+        approverType: step.approverType,
+        approverRole: step.approverRole ?? null,
+      })),
+    );
+  });
   console.info(`  + loại đơn ${input.code}`);
 }
 

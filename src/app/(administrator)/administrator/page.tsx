@@ -2,7 +2,7 @@ import { getAdminOverview } from "@/modules/approvals/approvals.query";
 import { AdminOverview } from "@/modules/approvals/components/admin-overview";
 import { listDepartmentOptions } from "@/modules/departments/departments.query";
 import { listRequestTypes } from "@/modules/request-types/request-types.query";
-import { listUserOptions } from "@/modules/users/users.query";
+import { countUsers } from "@/modules/users/users.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
 
 export default async function AdministratorPage() {
@@ -10,7 +10,7 @@ export default async function AdministratorPage() {
     getAdminOverview(),
     listDepartmentOptions(),
     listRequestTypes(),
-    listUserOptions(),
+    countUsers(),
   ]);
 
   return (
@@ -19,7 +19,7 @@ export default async function AdministratorPage() {
       <AdminOverview
         {...overview}
         counts={{
-          users: users.length,
+          users,
           departments: departments.length,
           activeTypes: types.filter((t) => t.isActive).length,
         }}

@@ -147,7 +147,7 @@ export function RequestForm({ types, draft, submitAction }: Props) {
       return;
     }
     message.success("Đã gửi đơn. Người duyệt sẽ nhận được thông báo.");
-    router.replace(`/workspace/requests/${id}`);
+    router.replace("/workspace/requests");
   }
 
   return (
@@ -178,13 +178,13 @@ export function RequestForm({ types, draft, submitAction }: Props) {
               />
             </Form.Item>
             {type?.description && <Alert type="info" showIcon className="!mb-6" title={type.description} />}
-            <Form.Item name="title" label="Tiêu đề" rules={[{ required: true, message: "Vui lòng nhập tiêu đề" }]}>
+            <Form.Item name="title" label="Tiêu đề" rules={[{ required: true, whitespace: true, message: "Vui lòng nhập tiêu đề" }]}>
               <Input maxLength={200} placeholder="Tóm tắt nội dung đề xuất" />
             </Form.Item>
             <Form.Item
               name="reason"
               label="Lý do / giải trình"
-              rules={[{ required: true, message: "Vui lòng nhập lý do" }]}
+              rules={[{ required: true, whitespace: true, message: "Vui lòng nhập lý do" }]}
             >
               <Input.TextArea rows={4} maxLength={5000} showCount />
             </Form.Item>

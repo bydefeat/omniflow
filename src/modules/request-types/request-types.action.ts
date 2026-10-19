@@ -45,7 +45,13 @@ export const updateRequestType = adminProcedure
   .createServerAction()
   .input(requestTypeUpdateInput)
   .handler(async ({ input: { id, ...values } }) => {
-    await db.update(requestTypes).set(values).where(eq(requestTypes.id, id)).catch(translate);
+    const updated = await db
+      .update(requestTypes)
+      .set(values)
+      .where(eq(requestTypes.id, id))
+      .returning({ id: requestTypes.id })
+      .catch(translate);
+    if (updated.length === 0) throw new ZSAError("NOT_FOUND", "Không tìm thấy loại đơn");
   });
 
 export const setRequestTypeActive = adminProcedure
