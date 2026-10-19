@@ -22,6 +22,17 @@ export const ROLE_LABELS: Record<Role | FunctionalRole, string> = {
   ...Object.fromEntries(FUNCTIONAL_ROLES.map((r) => [r.value, r.label])),
 } as Record<Role | FunctionalRole, string>;
 
+export const ASSIGNABLE_ROLES: readonly string[] = [
+  ROLES.APPROVER,
+  ROLES.ADMIN,
+  ...FUNCTIONAL_ROLES.map((r) => r.value),
+];
+
+export const APPROVER_ROLES: readonly string[] = [
+  ROLES.APPROVER,
+  ...FUNCTIONAL_ROLES.map((r) => r.value),
+];
+
 export const HOME_PATHS = {
   admin: "/administrator",
   default: "/workspace/dashboard",
