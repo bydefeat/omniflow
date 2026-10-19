@@ -35,6 +35,8 @@ export const userUpdateInput = z.object({
   id: z.string().min(1),
 });
 
+export const userIdInput = z.object({ userId: z.string().min(1) });
+
 export const userBanInput = z.object({
   userId: z.string().min(1),
   banned: z.boolean(),

@@ -14,7 +14,7 @@
 set -euo pipefail
 umask 027
 
-APP_ROOT="${APP_ROOT:-/opt/omniflow}"
+APP_ROOT="$(readlink -f "${APP_ROOT:-/opt/omniflow}")"
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 SERVICE="${SERVICE:-omniflow}"
 CHECK_URL="${CHECK_URL:-http://127.0.0.1:3000/authentication/sign-in}"
@@ -36,9 +36,16 @@ restart() {
   return 1
 }
 
+# Release đã triển khai trọn vẹn (build + migrate xong) mới có file .deployed.
+completed_releases() {
+  for dir in "$APP_ROOT"/releases/*/; do
+    [[ -f "$dir.deployed" ]] && readlink -f "$dir"
+  done | sort
+}
+
 if [[ "${1:-}" == "--rollback" ]]; then
   current="$(readlink -f "$APP_ROOT/current")"
-  previous="$(ls -1d "$APP_ROOT"/releases/*/ | sed 's#/$##' | sort | grep -B1 -Fx "$current" | head -n1)"
+  previous="$(completed_releases | grep -B1 -Fx "$current" | head -n1 || true)"
   if [[ -z "$previous" || "$previous" == "$current" ]]; then
     echo "Không có release nào trước $current" >&2
     exit 1
@@ -57,28 +64,29 @@ git -C "$APP_ROOT/repo" fetch --prune origin
 commit="$(git -C "$APP_ROOT/repo" rev-parse --verify "$REF^{commit}")"
 echo "Triển khai $REF ($commit) vào $release"
 
-mkdir -p "$release" "$APP_ROOT/shared/uploads"
-git -C "$APP_ROOT/repo" archive "$commit" | tar -x -C "$release"
-echo "$commit" >"$release/REVISION"
-ln -s "$APP_ROOT/shared/.env" "$release/.env"
-ln -s "$APP_ROOT/shared/uploads" "$release/uploads"
-
 cleanup_failed() {
   echo "Triển khai thất bại, giữ nguyên bản đang chạy. Xóa $release" >&2
   rm -rf "$release"
 }
 trap cleanup_failed ERR
 
+mkdir -p "$release" "$APP_ROOT/shared/uploads"
+git -C "$APP_ROOT/repo" archive "$commit" | tar -x -C "$release"
+echo "$commit" >"$release/REVISION"
+ln -s "$APP_ROOT/shared/.env" "$release/.env"
+ln -s "$APP_ROOT/shared/uploads" "$release/uploads"
+
 cd "$release"
 npm ci --no-audit --no-fund
 npm run build
 "$release/scripts/backup.sh"
 npm run db:migrate
+touch "$release/.deployed"
 trap - ERR
 
 ln -sfn "$release" "$APP_ROOT/current.tmp" && mv -T "$APP_ROOT/current.tmp" "$APP_ROOT/current"
 restart
 
-ls -1d "$APP_ROOT"/releases/*/ | sed 's#/$##' | sort | head -n "-$KEEP_RELEASES" | while read -r old; do
+for dir in "$APP_ROOT"/releases/*/; do readlink -f "$dir"; done | sort | head -n "-$KEEP_RELEASES" | while read -r old; do
   [[ "$old" == "$(readlink -f "$APP_ROOT/current")" ]] || rm -rf "$old"
 done

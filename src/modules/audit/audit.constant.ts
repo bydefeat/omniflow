@@ -4,6 +4,7 @@ export const AUDIT_ACTION_LABELS = {
   USER_LOCKED: "Khóa tài khoản",
   USER_UNLOCKED: "Mở khóa tài khoản",
   USER_PASSWORD_SET: "Đặt lại mật khẩu",
+  USER_SIGN_IN_UNLOCKED: "Gỡ khóa tạm đăng nhập",
   DEPARTMENT_CREATED: "Tạo phòng ban",
   DEPARTMENT_UPDATED: "Sửa phòng ban",
   DEPARTMENT_DELETED: "Xóa phòng ban",

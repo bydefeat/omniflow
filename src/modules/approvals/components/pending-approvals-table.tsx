@@ -63,7 +63,7 @@ export function PendingApprovalsTable({ rows, total, hasDelegators, filters, typ
         </Checkbox>
       </div>
 
-      {rows.length === 0 && !pending ? (
+      {total === 0 && !pending ? (
         <Empty
           className="!py-12"
           description={filtered ? "Không có đơn chờ duyệt khớp bộ lọc" : "Không có đơn nào đang chờ bạn duyệt"}

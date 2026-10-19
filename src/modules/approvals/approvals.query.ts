@@ -1,4 +1,4 @@
-import { type AnyColumn, and, asc, count, desc, eq, ilike, inArray, isNotNull, ne, not, or, type SQL, sql } from "drizzle-orm";
+import { type AnyColumn, and, asc, count, desc, eq, ilike, inArray, isNotNull, ne, or, type SQL, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { getActiveDelegators } from "@/modules/delegations/delegations.query";
@@ -82,7 +82,8 @@ function pendingWhere(actor: ActorContext, filters: Omit<PendingFilters, "page">
   return and(
     pendingFor(actor),
     filters.scope === "mine" ? mine : undefined,
-    filters.scope === "delegated" ? not(mine) : undefined,
+    // approver_id / approver_role are mutually exclusive, so `mine` is NULL (not false) on rows that are not mine.
+    filters.scope === "delegated" ? sql`(${mine}) is not true` : undefined,
     filters.typeId ? eq(requests.requestTypeId, filters.typeId) : undefined,
     filters.overdue ? sql`${approvals.dueAt} < now()` : undefined,
     searchText(filters.q, requests.code, requests.title, requester.name),

@@ -35,7 +35,7 @@ export function ApprovalHistoryTable({ rows, total, filters }: Props) {
           options={HISTORY_RESULTS.map((r) => ({ value: r, label: APPROVAL_RESULT_META[r].label }))}
         />
       </div>
-      {rows.length === 0 && !pending ? (
+      {total === 0 && !pending ? (
         <Empty
           className="!py-12"
           description={filtered ? "Không có lượt duyệt khớp bộ lọc" : "Bạn chưa xử lý lượt duyệt nào"}

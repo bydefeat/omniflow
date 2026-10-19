@@ -71,6 +71,20 @@
       "when": 1792430372902,
       "tag": "0009_notifications_by_date",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792432027347,
+      "tag": "0010_drop_sign_in_locked_until",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792432029081,
+      "tag": "0011_sign_in_attempts_by_ip",
+      "breakpoints": true
     }
   ]
 }

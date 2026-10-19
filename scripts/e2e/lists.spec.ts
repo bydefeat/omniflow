@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { apiAs, callAction, createSubmittedExpense, pageAs, waitingApprovalId } from "./helpers";
+import { apiAs, callAction, createSubmittedExpense, pageAs, sql, USERS, waitingApprovalId } from "./helpers";
 
 test("danh sách chờ duyệt, lịch sử duyệt và thông báo lọc, phân trang ở server", async ({ browser }) => {
   const employee = await apiAs("employee");
@@ -39,5 +39,32 @@ test("danh sách chờ duyệt, lịch sử duyệt và thông báo lọc, phân
     await admin.context().close();
   } finally {
     await callAction(employee, "cancelRequest", { requestId });
+  }
+});
+
+test("lọc 'được ủy quyền duyệt thay' chỉ hiện lượt của người ủy quyền", async ({ browser }) => {
+  const [[lead], [accountant]] = await Promise.all([
+    sql`select id from "user" where email = ${USERS.itLead.email}`,
+    sql`select id from "user" where email = ${USERS.accountant.email}`,
+  ]);
+  const [delegation] = await sql`
+    insert into delegations (id, delegator_id, delegate_id, starts_at, ends_at, reason)
+    values (${crypto.randomUUID()}, ${lead.id}, ${accountant.id}, now() - interval '1 hour', now() + interval '1 day', 'E2E lọc ủy quyền')
+    returning id`;
+  const employee = await apiAs("employee");
+  const title = `Lọc ủy quyền ${Date.now()}`;
+  const requestId = await createSubmittedExpense(employee, title);
+  try {
+    const page = await pageAs(browser, "accountant");
+    const query = `q=${encodeURIComponent(title)}`;
+    await page.goto(`/workspace/approvals?${query}&scope=delegated`);
+    await expect(page.getByRole("link", { name: title }).filter({ visible: true })).toHaveCount(1);
+    await expect(page.getByText(`Thay ${USERS.itLead.name}`).filter({ visible: true }).first()).toBeVisible();
+    await page.goto(`/workspace/approvals?${query}&scope=mine`);
+    await expect(page.getByText("Không có đơn chờ duyệt khớp bộ lọc")).toBeVisible();
+    await page.context().close();
+  } finally {
+    await callAction(employee, "cancelRequest", { requestId });
+    await sql`delete from delegations where id = ${delegation.id}`;
   }
 });

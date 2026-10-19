@@ -103,6 +103,12 @@ test("đăng nhập sai 5 lần thì tài khoản bị khóa tạm, admin đặt
     expect(locked.status()).toBe(429);
     expect(await locked.json()).toMatchObject({ code: "ACCOUNT_TEMPORARILY_LOCKED" });
 
+    const [lockedRow] = await sql`select failures from sign_in_failures where email = ${email}`;
+    expect(lockedRow.failures).toBeGreaterThan(5);
+    expect((await callAction(admin, "clearUserSignInLock", { userId: created.id }))[1]).toBeNull();
+    expect((await signIn(client, email, "Matkhau@123")).status()).toBe(200);
+    for (let attempt = 0; attempt < 5; attempt++) await signIn(client, email, `Lai${attempt}@matkhau`);
+
     expect((await callAction(admin, "setUserPassword", { userId: created.id, newPassword: "Matkhau@456" }))[1]).toBeNull();
     expect(await sql`select email from sign_in_failures where email = ${email}`).toHaveLength(0);
     expect((await signIn(client, email, "Matkhau@456")).status()).toBe(200);

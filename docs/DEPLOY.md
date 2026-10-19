@@ -109,7 +109,7 @@ sudo nginx -t && sudo systemctl reload nginx
 ### Chính sách đăng nhập (đã cài sẵn, không cần cấu hình)
 
 - Mật khẩu mới (admin tạo, đổi, đặt lại) tối thiểu 10 ký tự, có cả chữ và số. Mật khẩu cũ ngắn hơn vẫn đăng nhập được.
-- Sai mật khẩu 5 lần trong 15 phút thì email đó bị khóa đăng nhập 15 phút. Admin mở sớm bằng cách đặt mật khẩu mới hoặc mở khóa tài khoản.
+- Mỗi cặp email + IP được thử đăng nhập 5 lần trong 15 phút; quá số đó thì bị từ chối tới hết 15 phút. Tính theo cả IP nên người khác không khóa được tài khoản của bạn từ máy của họ; vì vậy cần đặt `DEFEAT_CLIENT_IP_HEADERS` đúng (nếu không, mọi người dùng chung một IP). Trong danh sách người dùng, tài khoản đang bị khóa tạm có nút "Tạm khóa đăng nhập · Gỡ"; đặt mật khẩu mới cũng gỡ khóa.
 - Phiên đăng nhập hết hạn sau 3 ngày không dùng (tự gia hạn mỗi 12 giờ khi đang dùng). Đổi vai trò, khóa tài khoản hoặc đặt mật khẩu mới đều đăng xuất mọi phiên của người đó.
 
 ## 7. Cập nhật phiên bản

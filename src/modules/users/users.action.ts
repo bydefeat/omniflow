@@ -17,6 +17,7 @@ import { user } from "./users.schema";
 import {
   userBanInput,
   userCreateInput,
+  userIdInput,
   userPasswordInput,
   userUpdateInput,
 } from "./users.validation";
@@ -198,6 +199,21 @@ export const setUserBanned = adminProcedure
       targetType: "user",
       targetId: input.userId,
       summary: `${await describeUser(input.userId)}${input.banned && input.reason ? ` · ${input.reason}` : ""}`,
+    });
+  });
+
+export const clearUserSignInLock = adminProcedure
+  .createServerAction()
+  .input(userIdInput)
+  .handler(async ({ input, ctx }) => {
+    const email = await emailOf(input.userId);
+    if (!email) throw new ActionError("NOT_FOUND", "Không tìm thấy người dùng");
+    await clearSignInFailures(email);
+    await recordAudit(db, ctx.user, {
+      action: "USER_SIGN_IN_UNLOCKED",
+      targetType: "user",
+      targetId: input.userId,
+      summary: await describeUser(input.userId),
     });
   });
 

@@ -1,0 +1,1 @@
+ALTER TABLE "sign_in_failures" DROP COLUMN "locked_until";

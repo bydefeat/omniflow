@@ -1,6 +1,6 @@
 "use server";
 
-import { and, count, eq, gte, inArray, isNull, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { requestTypes } from "@/modules/request-types/request-types.schema";
 import { buildFormValidator, type FormField } from "@/modules/request-types/request-types.validation";
@@ -216,7 +216,6 @@ export const deleteAttachment = authedProcedure
           id: attachments.id,
           requestId: attachments.requestId,
           storageKey: attachments.storageKey,
-          uploadedAt: attachments.uploadedAt,
         })
         .from(attachments)
         .innerJoin(requests, eq(requests.id, attachments.requestId))
@@ -234,7 +233,12 @@ export const deleteAttachment = authedProcedure
       const [submitted] = await tx
         .select({ id: requestRevisions.id })
         .from(requestRevisions)
-        .where(and(eq(requestRevisions.requestId, row.requestId), gte(requestRevisions.createdAt, row.uploadedAt)))
+        .where(
+          and(
+            eq(requestRevisions.requestId, row.requestId),
+            sql`${requestRevisions.attachments} @> ${JSON.stringify([{ id: row.id }])}::jsonb`,
+          ),
+        )
         .limit(1);
       if (submitted) {
         await tx

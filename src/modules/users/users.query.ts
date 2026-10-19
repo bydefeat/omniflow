@@ -2,10 +2,11 @@ import { and, asc, count, eq, ilike, not, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { departments } from "@/modules/departments/departments.schema";
+import { SIGN_IN_MAX_ATTEMPTS, SIGN_IN_WINDOW_MINUTES } from "@/shared/constants/auth.constant";
 import { db } from "@/shared/libs/db.lib";
 import { escapeLike, PAGE_SIZE } from "@/shared/libs/list-params.lib";
 
-import { user } from "./users.schema";
+import { signInFailures, user } from "./users.schema";
 
 const manager = alias(user, "manager");
 
@@ -27,6 +28,12 @@ export async function searchUsers(filters: UserFilters) {
         employeeCode: user.employeeCode,
         role: user.role,
         banned: user.banned,
+        signInLocked: sql<boolean>`exists (
+          select 1 from ${signInFailures}
+          where ${signInFailures.email} = lower(${user.email})
+            and ${signInFailures.failures} >= ${SIGN_IN_MAX_ATTEMPTS}
+            and ${signInFailures.firstFailedAt} >= now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES})
+        )`,
         departmentId: user.departmentId,
         departmentName: departments.name,
         managerId: user.managerId,

@@ -35,7 +35,7 @@ import {
 import { parseRoles } from "@/shared/libs/role.lib";
 import { PASSWORD_HINT, passwordFormRule } from "@/shared/libs/password.lib";
 
-import { createUser, setUserBanned, setUserPassword, updateUser } from "../users.action";
+import { clearUserSignInLock, createUser, setUserBanned, setUserPassword, updateUser } from "../users.action";
 import type { UserFilters, UserOption, UserRow } from "../users.query";
 import type { UserCreateValues } from "../users.validation";
 import { RoleTags } from "./role-tags";
@@ -98,6 +98,13 @@ export function UsersManager({ users, total, filters, managers, departments, cur
     const [, error] = await setUserBanned({ userId: row.id, banned: !row.banned });
     if (error) return message.error(error.message);
     message.success(row.banned ? "Đã mở khóa tài khoản" : "Đã khóa tài khoản");
+    router.refresh();
+  }
+
+  async function clearSignInLock(row: UserRow) {
+    const [, error] = await clearUserSignInLock({ userId: row.id });
+    if (error) return message.error(error.message);
+    message.success(`Đã gỡ khóa tạm đăng nhập cho ${row.name}`);
     router.refresh();
   }
 
@@ -196,9 +203,25 @@ export function UsersManager({ users, total, filters, managers, departments, cur
           {
             title: "Trạng thái",
             dataIndex: "banned",
-            width: 110,
-            render: (banned) =>
-              banned ? <Tag color="error">Đã khóa</Tag> : <Tag color="success">Hoạt động</Tag>,
+            width: 150,
+            render: (banned, row) => (
+              <Space size={4} wrap>
+                {banned ? <Tag color="error">Đã khóa</Tag> : <Tag color="success">Hoạt động</Tag>}
+                {row.signInLocked && (
+                  <Popconfirm
+                    title="Gỡ khóa tạm đăng nhập?"
+                    description="Tài khoản bị khóa tạm do đăng nhập sai nhiều lần."
+                    okText="Gỡ khóa"
+                    cancelText="Hủy"
+                    onConfirm={() => clearSignInLock(row)}
+                  >
+                    <Button size="small" color="orange" variant="outlined">
+                      Tạm khóa đăng nhập · Gỡ
+                    </Button>
+                  </Popconfirm>
+                )}
+              </Space>
+            ),
           },
           {
             key: "actions",

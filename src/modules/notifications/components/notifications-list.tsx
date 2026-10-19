@@ -55,7 +55,13 @@ export function NotificationsList({ rows: notifications, total, unread, filters 
         {notifications.length === 0 ? (
           <Empty
             className="!py-12"
-            description={filters.unread ? "Không còn thông báo chưa đọc" : "Chưa có thông báo"}
+            description={
+              total > 0
+                ? "Trang này không còn thông báo"
+                : filters.unread
+                  ? "Không còn thông báo chưa đọc"
+                  : "Chưa có thông báo"
+            }
           />
         ) : (
           notifications.map((n) => (
