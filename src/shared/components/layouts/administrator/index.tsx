@@ -18,7 +18,7 @@ export function AdministratorLayout({
       <AdministratorSidebar />
       <Layout>
         <AdministratorHeader user={user} />
-        <Layout.Content className="w-full p-4 md:p-6">{children}</Layout.Content>
+        <main className="w-full p-4 md:p-6">{children}</main>
       </Layout>
     </Layout>
   );

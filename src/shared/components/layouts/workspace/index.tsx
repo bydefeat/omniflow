@@ -28,9 +28,7 @@ export function WorkspaceLayout({
       <Sidebar access={access} badges={badges} />
       <Layout>
         <Topbar user={user} extra={headerExtra} />
-        <Layout.Content className="mx-auto w-full max-w-6xl p-4 pb-24 md:p-6">
-          {children}
-        </Layout.Content>
+        <main className="mx-auto w-full max-w-6xl p-4 pb-24 md:p-6">{children}</main>
       </Layout>
       <BottomTabs access={access} badges={badges} />
     </Layout>
