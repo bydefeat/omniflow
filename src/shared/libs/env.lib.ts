@@ -22,6 +22,10 @@ const schema = z.object({
   DEFEAT_S3_ENDPOINT_URL: z.url().optional().or(z.literal("").transform(() => undefined)),
   DEFEAT_S3_ACCESS_KEY_ID: z.string().optional(),
   DEFEAT_S3_SECRET_ACCESS_KEY: z.string().optional(),
+  DEFEAT_POSTGRES_POOL_MAX: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.coerce.number().int().min(1).max(100).default(10),
+  ),
   DEFEAT_CLIENT_IP_HEADERS: commaList,
   DEFEAT_TRUSTED_PROXIES: commaList,
 });

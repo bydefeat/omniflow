@@ -23,6 +23,7 @@ import { ActionError, authedProcedure, roleProcedure } from "@/shared/libs/actio
 import { db } from "@/shared/libs/db.lib";
 import { env } from "@/shared/libs/env.lib";
 import { flushMailOutbox, isMailConfigured, queueMail } from "@/shared/libs/mail.lib";
+import { logger } from "@/shared/libs/logger.lib";
 
 import { countPendingApprovals, getActorContext } from "./approvals.query";
 import { approvals } from "./approvals.schema";
@@ -129,7 +130,7 @@ async function inTransaction<T>(work: (tx: Tx, outbox: Outbox) => Promise<T>) {
     await queueNotificationMails(tx, outbox);
     return value;
   });
-  if (isMailConfigured) after(() => flushMailOutbox().catch((error) => console.error("[mail] flush thất bại", error)));
+  if (isMailConfigured) after(() => flushMailOutbox().catch((error) => logger.error("mail.flush_failed", { error })));
   return result;
 }
 

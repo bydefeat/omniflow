@@ -6,9 +6,13 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=omniflow
-WorkingDirectory=/opt/omniflow
+# current là symlink tới release đang chạy (scripts/deploy.sh); systemd giải symlink lúc khởi động.
+WorkingDirectory=/opt/omniflow/current
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/npm start -- --hostname 127.0.0.1 --port 3000
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000
+# Gửi SIGTERM thẳng cho node (không qua npm) để Next đóng kết nối gọn; quá 30 giây mới SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=30
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

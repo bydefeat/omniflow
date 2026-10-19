@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import { emailOutbox } from "@/modules/schema";
 import { db } from "@/shared/libs/db.lib";
 import { env } from "@/shared/libs/env.lib";
+import { logger } from "@/shared/libs/logger.lib";
 
 type Executor = Pick<typeof db, "insert">;
 export type MailMessage = { to: string; subject: string; text: string };
@@ -67,6 +68,7 @@ export async function flushMailOutbox() {
       await sendMail({ to: mail.recipient, subject: mail.subject, text: mail.body });
     } catch (error) {
       const attempts = mail.attempts + 1;
+      logger.warn("mail.send_failed", { mailId: mail.id, attempts, error });
       await db
         .update(emailOutbox)
         .set({

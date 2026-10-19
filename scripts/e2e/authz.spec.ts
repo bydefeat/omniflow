@@ -96,3 +96,10 @@ test("trang không tồn tại hiện thông báo tiếng Việt và vẫn giữ
   await expect(page.getByText("Không tìm thấy trang")).toBeVisible();
   await page.context().close();
 });
+
+test("health check báo database sẵn sàng, không cần đăng nhập và không bị cache", async ({ request }) => {
+  const response = await request.get("/api/health");
+  expect(response.status()).toBe(200);
+  expect(await response.json()).toEqual({ status: "ok" });
+  expect(response.headers()["cache-control"]).toContain("no-store");
+});

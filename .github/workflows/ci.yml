@@ -26,7 +26,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run lint
+      - run: bash -n scripts/*.sh
       - run: npx next typegen && npx tsc --noEmit
       - run: npm test
 

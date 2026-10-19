@@ -13,6 +13,7 @@ import { db } from "@/shared/libs/db.lib";
 import { env } from "@/shared/libs/env.lib";
 import { flushMailOutbox, isMailConfigured, queueMail } from "@/shared/libs/mail.lib";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordProblem } from "@/shared/libs/password.lib";
+import { logger } from "@/shared/libs/logger.lib";
 
 const LOCKOUT_MAX_FAILURES = 5;
 const LOCKOUT_MINUTES = 15;
@@ -119,9 +120,9 @@ export const auth = betterAuth({
           await flushMailOutbox();
         });
       } else if (process.env.NODE_ENV !== "production") {
-        console.info(`[reset-password] ${user.email}: ${url}`);
+        logger.info("auth.reset_password_link", { email: user.email, url });
       } else {
-        console.warn("[reset-password] SMTP chưa được cấu hình, không gửi được liên kết đặt lại mật khẩu");
+        logger.warn("auth.reset_password_unsent", { reason: "SMTP chưa được cấu hình", email: user.email });
       }
     },
   },
