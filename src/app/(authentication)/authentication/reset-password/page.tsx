@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import { ResetPasswordForm } from "@/modules/users/components/reset-password-form";
+
+export const metadata: Metadata = { title: "Đặt lại mật khẩu" };
 
 export default async function ResetPasswordPage({
   searchParams,

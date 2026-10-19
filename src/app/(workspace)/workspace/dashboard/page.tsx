@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { canAccessApprovals, summarizePendingApprovals } from "@/modules/approvals/approvals.query";
 import { PendingApprovalsCard } from "@/modules/approvals/components/pending-approvals-card";
 import { MyRequestsSummary } from "@/modules/requests/components/my-requests-summary";
 import { countMyRequestsByStatus, listMyRequests } from "@/modules/requests/requests.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { requireSession } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Tổng quan" };
 
 export default async function DashboardPage() {
   const { user } = await requireSession();

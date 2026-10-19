@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { forbidden } from "next/navigation";
 
 import { readPendingFilters } from "@/modules/approvals/approvals.constant";
@@ -6,6 +7,8 @@ import { PendingApprovalsTable } from "@/modules/approvals/components/pending-ap
 import { listRequestTypes } from "@/modules/request-types/request-types.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { requireSession } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Chờ tôi duyệt" };
 
 export default async function ApprovalsPage({ searchParams }: PageProps<"/workspace/approvals">) {
   const { user } = await requireSession();

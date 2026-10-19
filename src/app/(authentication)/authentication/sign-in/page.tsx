@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { SignInForm } from "@/modules/users/components/sign-in-form";
 import { getHomePath, safeCallbackPath } from "@/shared/libs/role.lib";
 import { getSession } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Đăng nhập" };
 
 export default async function SignInPage({
   searchParams,

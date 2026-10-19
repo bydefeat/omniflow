@@ -207,12 +207,13 @@ export function UsersManager({ users, total, filters, managers, departments, cur
             render: (_, row) => (
               <Space size={4}>
                 <Tooltip title="Sửa">
-                  <Button type="text" icon={<EditOutlined />} onClick={() => openForm(row)} />
+                  <Button type="text" icon={<EditOutlined />} aria-label={`Sửa ${row.name}`} onClick={() => openForm(row)} />
                 </Tooltip>
                 <Tooltip title="Đặt mật khẩu">
                   <Button
                     type="text"
                     icon={<KeyOutlined />}
+                    aria-label={`Đặt mật khẩu cho ${row.name}`}
                     onClick={() => {
                       passwordForm.resetFields();
                       setPasswordFor(row);
@@ -233,6 +234,7 @@ export function UsersManager({ users, total, filters, managers, departments, cur
                       danger={!row.banned}
                       disabled={row.id === currentUserId}
                       icon={row.banned ? <UnlockOutlined /> : <LockOutlined />}
+                      aria-label={`${row.banned ? "Mở khóa" : "Khóa"} ${row.name}`}
                     />
                   </Tooltip>
                 </Popconfirm>

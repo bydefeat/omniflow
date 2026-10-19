@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { listDepartmentOptions } from "@/modules/departments/departments.query";
 import { UsersManager } from "@/modules/users/components/users-manager";
 import { listUserOptions, searchUsers } from "@/modules/users/users.query";
 import { ASSIGNABLE_ROLES, ROLES } from "@/shared/constants/role.constant";
 import { readPage, readParam } from "@/shared/libs/list-params.lib";
 import { requireRole } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Người dùng" };
 
 export default async function UsersPage({ searchParams }: PageProps<"/administrator/users">) {
   const params = await searchParams;

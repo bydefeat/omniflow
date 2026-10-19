@@ -1,5 +1,6 @@
 import { type ReactNode, Suspense } from "react";
 
+import { NotificationBell } from "@/modules/notifications/components/notification-bell";
 import { AdministratorLayout } from "@/shared/components/layouts/administrator";
 import { PageSkeleton } from "@/shared/components/ui/page-skeleton";
 import { ROLES } from "@/shared/constants/role.constant";
@@ -8,7 +9,10 @@ import { requireRole } from "@/shared/libs/session.lib";
 async function AdministratorShell({ children }: { children: ReactNode }) {
   const { user } = await requireRole(ROLES.ADMIN);
   return (
-    <AdministratorLayout user={{ name: user.name, email: user.email, role: user.role, image: user.image }}>
+    <AdministratorLayout
+      user={{ name: user.name, email: user.email, role: user.role, image: user.image }}
+      headerExtra={<NotificationBell />}
+    >
       {children}
     </AdministratorLayout>
   );

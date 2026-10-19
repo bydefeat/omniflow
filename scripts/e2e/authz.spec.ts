@@ -103,3 +103,11 @@ test("health check báo database sẵn sàng, không cần đăng nhập và kh�
   expect(await response.json()).toEqual({ status: "ok" });
   expect(response.headers()["cache-control"]).toContain("no-store");
 });
+
+test("trang có tiêu đề riêng và trang quản trị có chuông thông báo", async ({ browser }) => {
+  const page = await pageAs(browser, "admin");
+  await page.goto("/administrator/users");
+  await expect(page).toHaveTitle("Người dùng · OmniFlow");
+  await expect(page.getByRole("button", { name: "Thông báo" })).toBeVisible();
+  await page.context().close();
+});

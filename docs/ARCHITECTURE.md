@@ -73,6 +73,7 @@ src/
 │   │       └── audit-log/           # nhật ký thao tác quản trị (ai, lúc nào, đổi gì, IP)
 │   │
 │   └── api/
+│       ├── health/route.ts          # ping database cho giám sát / script deploy
 │       ├── auth/[...all]/route.ts   # handler của better-auth
 │       └── files/[fileId]/route.ts  # tải tệp đính kèm, kiểm tra quyền trước khi trả file
 │
@@ -275,7 +276,7 @@ Mỗi folder chỉ export `index.tsx`. Menu lấy từ `shared/constants/navigat
 | Root layout | Chỉ 1 file `app/layout.tsx` | Nhiều root layout thì chuyển portal phải tải lại toàn trang |
 | Theme | 1 `ConfigProvider` ở root đọc `theme.constant.ts`; layout cần chỉnh thì lồng `ConfigProvider` con | Màu chỉ khai báo một chỗ |
 | Slug URL | Tiếng Anh (`/workspace/requests`) | Đồng bộ với tên code |
-| Phân quyền | 2 lớp: `authentication.proxy.ts` chỉ xem có cookie session; `layout.tsx` gọi `requireRole()` kiểm tra session thật. Action kiểm tra lại qua `authedProcedure` / `roleProcedure` | Proxy chỉ làm việc nhẹ; action là API công khai nên phải tự kiểm tra |
+| Phân quyền | 3 lớp: `authentication.proxy.ts` chỉ xem có cookie session; `layout.tsx` gọi `requireRole()` để dựng khung portal; **mỗi `page.tsx` tự gọi `requireRole()` / kiểm tra quyền** trước khi đọc dữ liệu. Action kiểm tra lại qua `authedProcedure` / `roleProcedure` | Khi điều hướng phía client, Next 16 chỉ render segment thay đổi nên layout không chạy lại: chỉ kiểm ở layout thì người có cookie hợp lệ phát lại request RSC của trang quản trị là đọc được dữ liệu (`authz.spec.ts` tái hiện). Action là API công khai nên phải tự kiểm tra |
 | Vai trò | Plugin `admin` của better-auth, một user nhiều role (`employee`, `approver`, `admin`). Mọi tài khoản đều có `employee` | Đúng quan hệ kế thừa ở docs.md 2.1. Admin cũng tạo đơn được |
 | Quyền mục Phê duyệt | `canAccessApprovals()` đặt ở `approvals.query.ts`, không ở `shared` | Phụ thuộc dữ liệu ủy quyền, là nghiệp vụ |
 | Sau đăng nhập | `admin` → `/administrator`, còn lại → `/workspace/dashboard` (khai báo ở `role.constant.ts`) | |

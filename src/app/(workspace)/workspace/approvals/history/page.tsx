@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { forbidden } from "next/navigation";
 
 import { readHistoryFilters } from "@/modules/approvals/approvals.constant";
@@ -5,6 +6,8 @@ import { canAccessApprovals, searchApprovalHistory } from "@/modules/approvals/a
 import { ApprovalHistoryTable } from "@/modules/approvals/components/approval-history-table";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { requireSession } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Lịch sử duyệt" };
 
 export default async function ApprovalHistoryPage({ searchParams }: PageProps<"/workspace/approvals/history">) {
   const { user } = await requireSession();

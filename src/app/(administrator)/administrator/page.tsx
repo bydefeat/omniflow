@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { getAdminOverview } from "@/modules/approvals/approvals.query";
 import { AdminOverview } from "@/modules/approvals/components/admin-overview";
 import { listDepartmentOptions } from "@/modules/departments/departments.query";
@@ -6,6 +7,8 @@ import { countUsers } from "@/modules/users/users.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
 import { ROLES } from "@/shared/constants/role.constant";
 import { requireRole } from "@/shared/libs/session.lib";
+
+export const metadata: Metadata = { title: "Quản trị" };
 
 export default async function AdministratorPage() {
   await requireRole(ROLES.ADMIN);
