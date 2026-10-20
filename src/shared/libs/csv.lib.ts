@@ -1,6 +1,5 @@
 type Cell = string | number | null | undefined;
 
-// Excel/Sheets treat cells starting with these as formulas; prefix a quote so exported text stays text.
 const FORMULA_START = /^[=+\-@\t\r]/;
 
 function cell(value: Cell) {
@@ -10,7 +9,6 @@ function cell(value: Cell) {
   return /[",\r\n;]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
-/** CSV with a UTF-8 BOM and CRLF line endings so Excel opens Vietnamese text correctly. */
 export function toCsv(header: string[], rows: Cell[][]) {
   return "﻿" + [header, ...rows].map((row) => row.map(cell).join(",")).join("\r\n") + "\r\n";
 }

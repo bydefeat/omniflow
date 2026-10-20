@@ -42,7 +42,6 @@ export const approvals = pgTable(
     decidedAt: timestamp({ withTimezone: true }),
     reassignedById: text().references(() => user.id),
     reassignedAt: timestamp({ withTimezone: true }),
-    // Set when the overdue reminder was sent for this round (one reminder per round and assignee).
     remindedAt: timestamp({ withTimezone: true }),
     ...timestamps,
   },

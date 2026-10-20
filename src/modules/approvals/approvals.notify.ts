@@ -11,9 +11,6 @@ import { isMailConfigured, queueMail } from "@/shared/libs/mail.lib";
 
 import { approvals } from "./approvals.schema";
 
-// Server-only helpers shared by approvals.action.ts and the overdue reminder job. Kept out of the
-// "use server" file because every export there becomes a callable server action.
-
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type NotificationType = (typeof notifications.$inferInsert)["type"];
 
@@ -74,10 +71,6 @@ export async function withDelegates(userIds: string[], requesterId: string) {
 
 const REMINDER_BATCH = 50;
 
-/**
- * Sends one "overdue" notification (and email when SMTP is set) per waiting round whose SLA has passed.
- * Rows are claimed with SKIP LOCKED so overlapping runs never remind twice.
- */
 export async function sendOverdueReminders() {
   let reminded = 0;
   for (;;) {

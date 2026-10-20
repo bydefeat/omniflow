@@ -43,7 +43,6 @@ import {
   submitInput,
 } from "./approvals.validation";
 
-
 async function assign(tx: Tx, step: StepConfig, requester: { id: string; managerId: string | null }) {
   const assignee = resolveAssignee(step, requester);
   if (!assignee) {
@@ -87,7 +86,6 @@ async function inTransaction<T>(work: (tx: Tx, outbox: Outbox) => Promise<T>) {
   if (isMailConfigured) after(() => flushMailOutbox().catch((error) => logger.error("mail.flush_failed", { error })));
   return result;
 }
-
 
 async function openRound(
   tx: Tx,

@@ -229,7 +229,6 @@ export const deleteAttachment = authedProcedure
         )
         .for("update", { of: requests });
       if (!row) throw new ActionError("NOT_FOUND", "Không tìm thấy tệp");
-      // A file that was part of a submitted version is evidence: keep it and only hide it from the new version.
       const [submitted] = await tx
         .select({ id: requestRevisions.id })
         .from(requestRevisions)

@@ -180,7 +180,6 @@ export const updateUser = adminProcedure
       }
       return "role" in changes;
     });
-    // Sign the user out everywhere so tabs opened under the old role cannot keep acting on stale screens.
     if (rolesChanged && input.id !== ctx.user.id) {
       await auth.api.revokeUserSessions({ headers: await headers(), body: { userId: input.id } });
     }

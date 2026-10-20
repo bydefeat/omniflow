@@ -112,7 +112,6 @@ export const signInFailures = pgTable(
   "sign_in_failures",
   {
     email: varchar({ length: 255 }).notNull(),
-    // Empty when the client IP is unknown (no trusted proxy header configured).
     ipAddress: varchar({ length: 64 }).notNull(),
     failures: integer().notNull(),
     firstFailedAt: timestamp({ withTimezone: true }).notNull(),

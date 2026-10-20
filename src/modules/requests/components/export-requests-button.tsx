@@ -5,7 +5,6 @@ import { Button, Tooltip } from "antd";
 
 import type { RequestFilters } from "../requests.query";
 
-// Mirrors EXPORT_ROW_LIMIT in requests.query.ts (not importable here: that module pulls in the database driver).
 const EXPORT_ROW_LIMIT = 10_000;
 
 export function ExportRequestsButton({ filters, total }: { filters: RequestFilters; total: number }) {
