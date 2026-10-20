@@ -25,8 +25,6 @@ function normalizeEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase().slice(0, 255) : null;
 }
 
-// Counts the attempt before the password is checked, in one statement, so parallel guesses cannot all slip
-// through before the first failure is written. Keyed by email + IP so a stranger cannot lock someone out.
 async function reserveSignInAttempt(email: string, ipAddress: string) {
   const windowStart = sql`now() - make_interval(mins => ${SIGN_IN_WINDOW_MINUTES})`;
   const [row] = await db
@@ -66,8 +64,6 @@ export const auth = betterAuth({
       trustedProxies: env.DEFEAT_TRUSTED_PROXIES,
     },
   },
-  // Profile changes go through our own validated actions (users.action.ts); the generic endpoint would also
-  // let users set arbitrary image URLs.
   disabledPaths: ["/update-user"],
   rateLimit: { storage: "database" },
   session: {

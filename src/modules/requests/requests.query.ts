@@ -190,7 +190,6 @@ export async function searchRequests(scope: { requesterId?: string }, filters: R
 
 export const EXPORT_ROW_LIMIT = 10_000;
 
-/** Submitted requests matching the admin list filters, for CSV export. Returns one row past EXPORT_ROW_LIMIT so callers can refuse instead of truncating. */
 export async function exportRequests(filters: Omit<RequestFilters, "page">) {
   return db
     .select({

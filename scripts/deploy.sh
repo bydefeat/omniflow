@@ -1,16 +1,4 @@
 #!/usr/bin/env bash
-# Triển khai một phiên bản mới vào thư mục release riêng rồi mới chuyển symlink `current`,
-# nên bản đang chạy không bị ghi đè giữa chừng và quay lại bản trước chỉ cần đổi symlink.
-#
-#   scripts/deploy.sh [ref]          # mặc định origin/main
-#   scripts/deploy.sh --rollback     # quay về release liền trước
-#
-# Cấu trúc trên máy chủ (APP_ROOT mặc định /opt/omniflow):
-#   repo/            bản clone git, chỉ dùng để fetch
-#   shared/.env      cấu hình dùng chung mọi release
-#   shared/uploads/  tệp đính kèm khi lưu trên đĩa
-#   releases/<thời điểm>/
-#   current -> releases/<thời điểm>
 set -euo pipefail
 umask 027
 
@@ -36,7 +24,6 @@ restart() {
   return 1
 }
 
-# Release đã triển khai trọn vẹn (build + migrate xong) mới có file .deployed.
 completed_releases() {
   for dir in "$APP_ROOT"/releases/*/; do
     [[ -f "$dir.deployed" ]] && readlink -f "$dir"

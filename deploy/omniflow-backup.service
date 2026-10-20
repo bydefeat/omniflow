@@ -8,5 +8,4 @@ User=omniflow
 WorkingDirectory=/opt/omniflow/current
 Environment=BACKUP_DIR=/var/backups/omniflow
 Environment=BACKUP_KEEP_DAYS=14
-# Environment=BACKUP_RSYNC_TARGET=backup@nas.example.com:/srv/omniflow
 ExecStart=/opt/omniflow/current/scripts/backup.sh

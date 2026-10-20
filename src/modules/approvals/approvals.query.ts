@@ -82,7 +82,6 @@ function pendingWhere(actor: ActorContext, filters: Omit<PendingFilters, "page">
   return and(
     pendingFor(actor),
     filters.scope === "mine" ? mine : undefined,
-    // approver_id / approver_role are mutually exclusive, so `mine` is NULL (not false) on rows that are not mine.
     filters.scope === "delegated" ? sql`(${mine}) is not true` : undefined,
     filters.typeId ? eq(requests.requestTypeId, filters.typeId) : undefined,
     filters.overdue ? sql`${approvals.dueAt} < now()` : undefined,
@@ -393,7 +392,6 @@ export async function getAdminOverview() {
 }
 
 export async function getReportData() {
-  // Inline the zone as a literal: a bound parameter would make GROUP BY and SELECT different expressions.
   const zone = sql.raw(`'${APP_TIME_ZONE}'`);
   const localMonth = sql`date_trunc('month', ${requests.submittedAt} at time zone ${zone})`;
   const [byType, monthly, stepDurations, [sla]] = await Promise.all([

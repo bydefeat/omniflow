@@ -8,7 +8,6 @@ function serialize(value: unknown): unknown {
   return value;
 }
 
-// One JSON object per line in production so journald / log shippers can filter by field; readable text in dev.
 function write(level: Level, message: string, fields: Fields = {}) {
   const entries = Object.entries(fields).map(([key, value]) => [key, serialize(value)] as const);
   const sink = level === "error" ? console.error : level === "warn" ? console.warn : console.info;
