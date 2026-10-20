@@ -7,6 +7,7 @@ import { ApprovalTimeline } from "@/modules/approvals/components/approval-timeli
 import { RequestDetail } from "@/modules/requests/components/request-detail";
 import { getRequestDetail } from "@/modules/requests/requests.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
+import { PrintButton } from "@/shared/components/ui/print-button";
 import { requireSession } from "@/shared/libs/session.lib";
 
 export const metadata: Metadata = { title: "Duyệt đơn" };
@@ -24,16 +25,23 @@ export default async function ApprovalDetailPage({ params }: PageProps<"/workspa
 
   return (
     <>
-      <PageHeader title={request.code} subtitle={request.typeName} backHref="/workspace/approvals" />
+      <PageHeader
+        title={request.code}
+        subtitle={request.typeName}
+        backHref="/workspace/approvals"
+        extra={<PrintButton />}
+      />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <RequestDetail request={request} />
           {actionable && (
-            <ApprovalActions
+            <div data-print-hidden>
+              <ApprovalActions
               approvalId={actionable.approvalId}
               stepName={actionable.stepName}
               onBehalfOfName={actionable.onBehalfOfName}
-            />
+              />
+            </div>
           )}
         </div>
         <ApprovalTimeline timeline={timeline} />

@@ -10,7 +10,7 @@ Kế hoạch chi tiết theo lộ trình ở `ARCHITECTURE.md` mục 7. Mỗi gi
 - [x] Hướng dẫn triển khai không dùng Docker ở `docs/DEPLOY.md` (systemd, nginx, sao lưu, file mẫu trong `deploy/`).
 - [x] Toàn bộ 10 giai đoạn đã làm và kiểm thử, kết quả ở mục 4.
 - [x] Đợt hoàn thiện sau audit: kiểm quyền ở từng trang quản trị (không chỉ layout), header bảo mật, trang lỗi / 404 tiếng Việt, nhật ký quản trị (`audit_logs`), giữ bản cũ và tệp đã gửi khi bổ sung (`request_revisions`, `attachments.removed_at`), chính sách mật khẩu + khóa tạm khi đăng nhập sai + thời hạn phiên, phân trang và lọc ở server cho chờ duyệt / lịch sử / thông báo, báo cáo theo giờ Việt Nam, log JSON, triển khai theo release (`scripts/deploy.sh`).
-- [ ] Chưa làm, cần chốt phạm vi: xuất / in đơn, nhắc SLA tự động, người dùng tự sửa tên, admin tạo ủy quyền thay người khác.
+- [x] Ngoài đặc tả, đã làm thêm: in đơn, xuất CSV danh sách đơn (admin), nhắc lượt duyệt quá hạn SLA (`npm run sla:remind`, systemd timer), người dùng tự sửa họ tên, admin tạo / hủy ủy quyền thay người khác.
 
 ### Chạy dự án
 
@@ -43,7 +43,7 @@ Các chỗ thiếu trong `docs.md` (xem `ARCHITECTURE.md` mục 6) tạm chốt 
 | G6 | Khóa tài khoản (`LOCKED`) dùng `banned` của plugin `admin` better-auth, không thêm cột `status` riêng |
 | G7 | Thông báo luôn có trong ứng dụng. Khi có `DEFEAT_SMTP_CONNECTION_URL` thì gửi thêm email (đặt lại mật khẩu, mọi thông báo duyệt), gửi sau khi transaction commit |
 | G8 | Tệp đính kèm lưu ổ đĩa local (`uploads/`, đã gitignore), hoặc S3/R2/MinIO khi có `DEFEAT_S3_BUCKET_NAME`; tối đa 10 MB/tệp, chỉ PDF, ảnh, Excel, Word, kiểm tra cả đuôi tệp và chữ ký nội dung (chấp nhận cả `.xls` dạng HTML/XML do ERP xuất, `.doc` dạng RTF); loại MIME lưu theo đuôi tệp, không tin trình duyệt |
-| G9 | SLA chỉ để báo cáo và tô màu quá hạn; không tự động chuyển cấp hay nhắc nhở |
+| G9 | SLA dùng để báo cáo, tô màu quá hạn và nhắc người duyệt **một lần** khi quá hạn; không tự động chuyển cấp |
 
 ## 2. Thiết kế database (PDM)
 
@@ -341,6 +341,8 @@ Chạy: DB mới → `db:migrate` → `db:seed -- --demo` → `npm run build` �
 | `return.spec.ts` | Người duyệt yêu cầu bổ sung (bắt buộc nội dung) → người làm đơn thấy thông báo, bổ sung tệp, sửa lý do, gửi lại → đơn duyệt lại từ bước đầu; hủy khi chờ bổ sung báo cho người đã yêu cầu; hủy khi đang chờ bổ sung; gửi lại hai lần bị chặn; tệp đã gửi chỉ gỡ mềm, bản trước xem được |
 | `authz.spec.ts` | Nhân viên mở trực tiếp hoặc phát lại request điều hướng RSC của trang quản trị không thấy dữ liệu; mọi action quản trị trả FORBIDDEN; header bảo mật; 404 tiếng Việt; tiêu đề trang |
 | `audit.spec.ts` | Tạo / sửa / xóa phòng ban ghi nhật ký kèm diff, trang nhật ký lọc được |
+| `extras.spec.ts` | Tự sửa họ tên (endpoint `update-user` của better-auth bị tắt); admin xuất CSV theo bộ lọc, nhân viên bị chặn; in đơn ẩn khung portal; admin tạo / hủy ủy quyền thay, trùng thời gian bị chặn, có nhật ký |
+| `sla.spec.ts` | Chạy `sla:remind` thật: chưa quá hạn không nhắc, quá hạn nhắc đúng một lần, giao lại thì nhắc người mới |
 | `lists.spec.ts` | Chờ duyệt lọc theo từ khóa, ủy quyền, quá hạn; lịch sử lọc theo kết quả; thông báo lọc chưa đọc; báo cáo tháng chạy được |
 | `followups.spec.ts` | Lọc và phân trang ở server theo URL; người chỉ được ủy quyền vào trang ủy quyền; người ủy quyền thấy lượt được duyệt thay trong lịch sử; nháp cũ lưu được sau khi biểu mẫu đổi; tệp giả PDF bị từ chối; lỗi rõ cho id không tồn tại, phòng ban sai, quản lý bị khóa |
 

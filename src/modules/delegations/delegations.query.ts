@@ -1,11 +1,13 @@
-import { and, desc, eq, gt, inArray, lte, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, ilike, inArray, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { user } from "@/modules/users/users.schema";
 import { APPROVER_ROLES } from "@/shared/constants/role.constant";
 import { db } from "@/shared/libs/db.lib";
+import { escapeLike, PAGE_SIZE } from "@/shared/libs/list-params.lib";
 import { parseRoles } from "@/shared/libs/role.lib";
 
+import type { DelegationStatus } from "./delegations.constant";
 import { delegations } from "./delegations.schema";
 
 export async function getActiveDelegators(delegateId: string) {
@@ -95,3 +97,43 @@ export async function listMyDelegations(userId: string) {
 }
 
 export type DelegationRow = Awaited<ReturnType<typeof listMyDelegations>>["given"][number];
+
+export type DelegationFilters = { q?: string; status?: DelegationStatus; page: number };
+
+export async function searchDelegations(filters: DelegationFilters) {
+  const q = filters.q && `%${escapeLike(filters.q)}%`;
+  const where = and(
+    q ? or(ilike(delegator.name, q), ilike(delegate.name, q), ilike(delegations.reason, q)) : undefined,
+    filters.status ? sql`${displayStatus} = ${filters.status}` : undefined,
+  );
+  const [rows, [{ total }]] = await Promise.all([
+    db
+      .select({
+        id: delegations.id,
+        startsAt: delegations.startsAt,
+        endsAt: delegations.endsAt,
+        reason: delegations.reason,
+        displayStatus,
+        delegatorName: delegator.name,
+        delegatorCode: delegator.employeeCode,
+        delegateName: delegate.name,
+        delegateCode: delegate.employeeCode,
+      })
+      .from(delegations)
+      .innerJoin(delegator, eq(delegator.id, delegations.delegatorId))
+      .innerJoin(delegate, eq(delegate.id, delegations.delegateId))
+      .where(where)
+      .orderBy(desc(delegations.startsAt), desc(delegations.id))
+      .limit(PAGE_SIZE)
+      .offset((filters.page - 1) * PAGE_SIZE),
+    db
+      .select({ total: count() })
+      .from(delegations)
+      .innerJoin(delegator, eq(delegator.id, delegations.delegatorId))
+      .innerJoin(delegate, eq(delegate.id, delegations.delegateId))
+      .where(where),
+  ]);
+  return { rows, total };
+}
+
+export type AdminDelegationRow = Awaited<ReturnType<typeof searchDelegations>>["rows"][number];

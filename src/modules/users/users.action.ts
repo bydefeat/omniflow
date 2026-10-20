@@ -4,7 +4,7 @@ import { eq, or, sql } from "drizzle-orm";
 import { headers } from "next/headers";
 
 import { ROLES } from "@/shared/constants/role.constant";
-import { ActionError, roleProcedure } from "@/shared/libs/action.lib";
+import { ActionError, authedProcedure, roleProcedure } from "@/shared/libs/action.lib";
 import { auth, clearSignInFailures } from "@/shared/libs/auth.lib";
 import { db } from "@/shared/libs/db.lib";
 import { PG_ERRORS, pgErrorCode } from "@/shared/libs/db-error.lib";
@@ -17,6 +17,7 @@ import { user } from "./users.schema";
 import {
   userBanInput,
   userCreateInput,
+  ownNameInput,
   userIdInput,
   userPasswordInput,
   userUpdateInput,
@@ -76,6 +77,14 @@ async function describeUser(id: string) {
   const [row] = await db.select({ name: user.name, email: user.email }).from(user).where(eq(user.id, id));
   return row ? `${row.name} <${row.email}>` : id;
 }
+
+export const updateOwnName = authedProcedure
+  .createServerAction()
+  .input(ownNameInput)
+  .handler(async ({ input, ctx }) => {
+    await db.update(user).set({ name: input.name }).where(eq(user.id, ctx.user.id));
+    return { name: input.name };
+  });
 
 export const createUser = adminProcedure
   .createServerAction()

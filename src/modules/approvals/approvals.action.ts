@@ -1,11 +1,9 @@
 "use server";
 
-import { and, asc, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { after } from "next/server";
 
 import { recordAudit } from "@/modules/audit/audit.service";
-import { getActiveDelegates } from "@/modules/delegations/delegations.query";
-import { notifications } from "@/modules/notifications/notifications.schema";
 import { approvalSteps, requestTypes } from "@/modules/request-types/request-types.schema";
 import { buildFormValidator } from "@/modules/request-types/request-types.validation";
 import {
@@ -18,13 +16,21 @@ import {
 } from "@/modules/requests/requests.schema";
 import { formatRequestCode } from "@/modules/requests/requests.service";
 import { user } from "@/modules/users/users.schema";
-import { FUNCTIONAL_ROLES, ROLES } from "@/shared/constants/role.constant";
+import { ROLES } from "@/shared/constants/role.constant";
 import { ActionError, authedProcedure, roleProcedure } from "@/shared/libs/action.lib";
 import { db } from "@/shared/libs/db.lib";
-import { env } from "@/shared/libs/env.lib";
-import { flushMailOutbox, isMailConfigured, queueMail } from "@/shared/libs/mail.lib";
+import { flushMailOutbox, isMailConfigured } from "@/shared/libs/mail.lib";
 import { logger } from "@/shared/libs/logger.lib";
 
+import {
+  findRoleHolders,
+  type Outbox,
+  notify,
+  type Tx,
+  queueNotificationMails,
+  roleLabel,
+  withDelegates,
+} from "./approvals.notify";
 import { countPendingApprovals, getActorContext } from "./approvals.query";
 import { approvals } from "./approvals.schema";
 import { type Assignee, computeDueAt, decideAct, nextStep, resolveAssignee, type StepConfig } from "./approvals.service";
@@ -37,24 +43,6 @@ import {
   submitInput,
 } from "./approvals.validation";
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-type NotificationType = (typeof notifications.$inferInsert)["type"];
-
-const roleLabel = (role: string) => FUNCTIONAL_ROLES.find((r) => r.value === role)?.label ?? role;
-
-async function findRoleHolders(tx: Tx, role: string, excludeId: string) {
-  const rows = await tx
-    .select({ id: user.id })
-    .from(user)
-    .where(
-      and(
-        sql`(',' || coalesce(${user.role}, '') || ',') like ${`%,${role},%`}`,
-        sql`${user.banned} is not true`,
-        ne(user.id, excludeId),
-      ),
-    );
-  return rows.map((r) => r.id);
-}
 
 async function assign(tx: Tx, step: StepConfig, requester: { id: string; managerId: string | null }) {
   const assignee = resolveAssignee(step, requester);
@@ -89,40 +77,6 @@ async function assign(tx: Tx, step: StepConfig, requester: { id: string; manager
   return { assignee, recipients };
 }
 
-type Outbox = { userIds: string[]; title: string; href: string }[];
-
-async function notify(
-  tx: Tx,
-  outbox: Outbox,
-  userIds: string[],
-  payload: { type: NotificationType; title: string; href: string },
-) {
-  const unique = [...new Set(userIds)];
-  if (unique.length === 0) return;
-  await tx.insert(notifications).values(unique.map((userId) => ({ userId, ...payload })));
-  outbox.push({ userIds: unique, title: payload.title, href: payload.href });
-}
-
-async function queueNotificationMails(tx: Tx, outbox: Outbox) {
-  if (!isMailConfigured || outbox.length === 0) return;
-  const recipients = await tx
-    .select({ id: user.id, email: user.email, name: user.name })
-    .from(user)
-    .where(and(inArray(user.id, [...new Set(outbox.flatMap((m) => m.userIds))]), sql`${user.banned} is not true`));
-  await queueMail(
-    tx,
-    outbox.flatMap((message) =>
-      recipients
-        .filter((r) => message.userIds.includes(r.id))
-        .map((recipient) => ({
-          to: recipient.email,
-          subject: message.title,
-          text: `Chào ${recipient.name},\n\n${message.title}\n\nXem chi tiết: ${new URL(message.href, env.DEFEAT_BETTER_AUTH_PUBLIC_APPLICATION_BASE_URL)}`,
-        })),
-    ),
-  );
-}
-
 async function inTransaction<T>(work: (tx: Tx, outbox: Outbox) => Promise<T>) {
   const result = await db.transaction(async (tx) => {
     const outbox: Outbox = [];
@@ -134,10 +88,6 @@ async function inTransaction<T>(work: (tx: Tx, outbox: Outbox) => Promise<T>) {
   return result;
 }
 
-async function withDelegates(userIds: string[], requesterId: string) {
-  const delegates = await getActiveDelegates(userIds);
-  return [...userIds, ...delegates.map((d) => d.delegateId)].filter((id) => id !== requesterId);
-}
 
 async function openRound(
   tx: Tx,
@@ -556,7 +506,13 @@ export const reassignApproval = roleProcedure(ROLES.ADMIN)
       }
       await tx
         .update(approvals)
-        .set({ approverId: input.approverId, approverRole: null, reassignedById: ctx.user.id, reassignedAt: new Date() })
+        .set({
+          approverId: input.approverId,
+          approverRole: null,
+          reassignedById: ctx.user.id,
+          reassignedAt: new Date(),
+          remindedAt: null,
+        })
         .where(eq(approvals.id, row.id));
       await recordAudit(tx, ctx.user, {
         action: "APPROVAL_REASSIGNED",

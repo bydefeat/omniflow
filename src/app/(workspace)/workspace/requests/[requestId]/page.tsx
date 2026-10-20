@@ -10,6 +10,7 @@ import { ReturnNotice } from "@/modules/approvals/components/return-notice";
 import { RequestDetail } from "@/modules/requests/components/request-detail";
 import { getRequestDetail } from "@/modules/requests/requests.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
+import { PrintButton } from "@/shared/components/ui/print-button";
 import { requireSession } from "@/shared/libs/session.lib";
 
 export const metadata: Metadata = { title: "Chi tiết đơn" };
@@ -32,6 +33,7 @@ export default async function RequestPage({ params }: PageProps<"/workspace/requ
         backHref="/workspace/requests"
         extra={
           <>
+            {request.status !== "DRAFT" && <PrintButton />}
             {request.status === "DRAFT" && (
               <Link href={`/workspace/requests/${request.id}/edit`}>
                 <Button type="primary">Tiếp tục soạn</Button>

@@ -1,0 +1,9 @@
+[Unit]
+Description=OmniFlow: nhắc lượt duyệt quá hạn mỗi giờ (giờ hành chính)
+
+[Timer]
+OnCalendar=Mon..Sat *-*-* 08..17:05:00 Asia/Ho_Chi_Minh
+Persistent=true
+
+[Install]
+WantedBy=timers.target

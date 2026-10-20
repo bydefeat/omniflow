@@ -15,6 +15,8 @@ export const AUDIT_ACTION_LABELS = {
   FORM_SCHEMA_SAVED: "Lưu biểu mẫu",
   APPROVAL_STEPS_SAVED: "Lưu bước duyệt",
   APPROVAL_REASSIGNED: "Giao lại người duyệt",
+  DELEGATION_CREATED: "Tạo ủy quyền thay",
+  DELEGATION_CANCELLED: "Hủy ủy quyền",
 } as const;
 
 export type AuditAction = keyof typeof AUDIT_ACTION_LABELS;

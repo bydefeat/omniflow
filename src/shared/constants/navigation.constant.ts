@@ -135,6 +135,12 @@ export const ADMINISTRATOR_NAV: NavGroup[] = [
         href: "/administrator/request-types",
         icon: createElement(ProfileOutlined),
       },
+      {
+        key: "admin-delegations",
+        label: "Ủy quyền",
+        href: "/administrator/delegations",
+        icon: createElement(SwapOutlined),
+      },
     ],
   },
   {

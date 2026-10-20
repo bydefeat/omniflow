@@ -148,9 +148,9 @@ export async function countMyRequestsByStatus(userId: string) {
 
 export type RequestFilters = { q?: string; status?: RequestStatus; typeId?: string; page: number };
 
-export async function searchRequests(scope: { requesterId?: string }, filters: RequestFilters) {
+function requestsWhere(scope: { requesterId?: string }, filters: Omit<RequestFilters, "page">) {
   const q = filters.q && `%${escapeLike(filters.q)}%`;
-  const where = and(
+  return and(
     scope.requesterId ? eq(requests.requesterId, scope.requesterId) : ne(requests.status, "DRAFT"),
     q
       ? or(ilike(requests.title, q), ilike(requests.code, q), scope.requesterId ? undefined : ilike(user.name, q))
@@ -158,6 +158,10 @@ export async function searchRequests(scope: { requesterId?: string }, filters: R
     filters.status ? eq(requests.status, filters.status) : undefined,
     filters.typeId ? eq(requests.requestTypeId, filters.typeId) : undefined,
   );
+}
+
+export async function searchRequests(scope: { requesterId?: string }, filters: RequestFilters) {
+  const where = requestsWhere(scope, filters);
   const [rows, [{ total }]] = await Promise.all([
     db
       .select({
@@ -182,6 +186,32 @@ export async function searchRequests(scope: { requesterId?: string }, filters: R
       .where(where),
   ]);
   return { rows, total };
+}
+
+export const EXPORT_ROW_LIMIT = 10_000;
+
+/** Submitted requests matching the admin list filters, for CSV export. Returns one row past EXPORT_ROW_LIMIT so callers can refuse instead of truncating. */
+export async function exportRequests(filters: Omit<RequestFilters, "page">) {
+  return db
+    .select({
+      code: requests.code,
+      title: requests.title,
+      typeName: requestTypes.name,
+      requesterCode: user.employeeCode,
+      requesterName: user.name,
+      departmentName: departments.name,
+      status: requests.status,
+      totalAmount: requests.totalAmount,
+      submittedAt: requests.submittedAt,
+      completedAt: requests.completedAt,
+    })
+    .from(requests)
+    .innerJoin(requestTypes, eq(requestTypes.id, requests.requestTypeId))
+    .innerJoin(user, eq(user.id, requests.requesterId))
+    .leftJoin(departments, eq(departments.id, requests.departmentId))
+    .where(requestsWhere({}, filters))
+    .orderBy(sql`${requests.submittedAt} desc nulls last`)
+    .limit(EXPORT_ROW_LIMIT + 1);
 }
 
 export type RequestSearchRow = Awaited<ReturnType<typeof searchRequests>>["rows"][number];

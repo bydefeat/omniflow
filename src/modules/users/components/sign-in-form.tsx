@@ -28,10 +28,12 @@ export function SignInForm({ callbackPath }: { callbackPath: string | null }) {
     if (error) {
       setLoading(false);
       setError(
-        ERROR_MESSAGES[error.code ?? ""] ??
-          (error.status === 429 && error.message
-            ? error.message
-            : "Không thể đăng nhập. Vui lòng thử lại."),
+        error.code === "ACCOUNT_TEMPORARILY_LOCKED" && error.message
+          ? error.message
+          : (ERROR_MESSAGES[error.code ?? ""] ??
+              (error.status === 429
+                ? "Bạn thử đăng nhập quá nhanh. Vui lòng đợi khoảng 10 giây rồi thử lại."
+                : "Không thể đăng nhập. Vui lòng thử lại.")),
       );
       return;
     }

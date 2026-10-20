@@ -17,7 +17,7 @@ export function PageHeader({ title, subtitle, extra, backHref }: PageHeaderProps
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div className="flex min-w-0 items-start gap-3">
         {backHref && (
-          <Link href={backHref}>
+          <Link href={backHref} data-print-hidden>
             <Button type="text" icon={<ArrowLeftOutlined />} aria-label="Quay lại" />
           </Link>
         )}
@@ -30,7 +30,11 @@ export function PageHeader({ title, subtitle, extra, backHref }: PageHeaderProps
           )}
         </div>
       </div>
-      {extra && <div className="flex flex-wrap gap-2">{extra}</div>}
+      {extra && (
+        <div className="flex flex-wrap gap-2" data-print-hidden>
+          {extra}
+        </div>
+      )}
     </div>
   );
 }

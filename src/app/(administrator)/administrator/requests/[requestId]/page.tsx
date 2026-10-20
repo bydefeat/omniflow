@@ -8,6 +8,7 @@ import { RequestDetail } from "@/modules/requests/components/request-detail";
 import { getRequestDetail } from "@/modules/requests/requests.query";
 import { listUserOptions } from "@/modules/users/users.query";
 import { PageHeader } from "@/shared/components/ui/page-header";
+import { PrintButton } from "@/shared/components/ui/print-button";
 import { ROLES } from "@/shared/constants/role.constant";
 import { requireRole } from "@/shared/libs/session.lib";
 
@@ -26,14 +27,23 @@ export default async function AdminRequestPage({ params }: PageProps<"/administr
 
   return (
     <>
-      <PageHeader title={request.code} subtitle={request.typeName} backHref="/administrator/requests" />
+      <PageHeader
+        title={request.code}
+        subtitle={request.typeName}
+        backHref="/administrator/requests"
+        extra={<PrintButton />}
+      />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <RequestDetail request={request} />
         </div>
         <div className="space-y-6">
           <ApprovalTimeline timeline={timeline} />
-          {waitingRound && <ReassignApproval round={waitingRound} users={users} />}
+          {waitingRound && (
+            <div data-print-hidden>
+              <ReassignApproval round={waitingRound} users={users} />
+            </div>
+          )}
         </div>
       </div>
     </>

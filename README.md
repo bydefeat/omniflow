@@ -9,22 +9,25 @@ Không có đăng ký tài khoản: mọi tài khoản do quản trị viên c�
 **Nhân viên (`/workspace`)**
 - Tạo đơn theo biểu mẫu động của từng loại đơn, hạng mục chi tiết tự cộng tiền, đính kèm PDF/ảnh/Word/Excel (kiểm tra nội dung tệp, tối đa 10 MB).
 - Lưu nháp, gửi duyệt, hủy đơn đang chờ; khi bị yêu cầu bổ sung thì sửa và gửi lại (nội dung lần gửi trước và tệp đã gửi được giữ làm bằng chứng).
-- Theo dõi dòng thời gian duyệt, thông báo trong ứng dụng và qua email.
+- Theo dõi dòng thời gian duyệt, thông báo trong ứng dụng và qua email; in đơn.
+- Tự sửa họ tên, đổi mật khẩu ở trang hồ sơ.
 
 **Người duyệt**
 - Danh sách chờ duyệt lọc theo từ khóa, loại đơn, giao cho mình hoặc được ủy quyền, quá hạn SLA (UC-05).
 - Duyệt, từ chối (bắt buộc lý do), yêu cầu bổ sung; lịch sử duyệt có lọc.
+- Được nhắc (thông báo + email) một lần khi lượt duyệt quá hạn SLA.
 - Ủy quyền duyệt thay trong một khoảng thời gian (UC-08).
 
 **Quản trị viên (`/administrator`)**
 - Phòng ban, người dùng (vai trò, quản lý trực tiếp, khóa/mở khóa, đặt mật khẩu).
 - Loại đơn: biểu mẫu kéo thả (UC-09), bước duyệt theo quản lý trực tiếp hoặc vai trò (UC-10), SLA.
-- Giám sát toàn bộ đơn, giao lại lượt duyệt bị treo, báo cáo theo tháng và tỷ lệ đúng SLA.
+- Giám sát toàn bộ đơn (xuất CSV theo bộ lọc), giao lại lượt duyệt bị treo, báo cáo theo tháng và tỷ lệ đúng SLA.
+- Tạo / hủy ủy quyền thay người duyệt vắng mặt đột xuất.
 - Nhật ký quản trị: ai đổi gì, lúc nào, từ IP nào.
 
 **Bảo mật và vận hành**
 - Kiểm tra quyền ở từng trang và từng server action; header bảo mật (CSP `frame-ancestors`, `nosniff`, HSTS khi chạy HTTPS).
-- Mật khẩu tối thiểu 10 ký tự gồm chữ và số; khóa tạm 15 phút sau 5 lần đăng nhập sai; giới hạn tần suất theo IP.
+- Mật khẩu tối thiểu 10 ký tự gồm chữ và số; mỗi email + IP thử tối đa 5 lần / 15 phút; giới hạn tần suất theo IP.
 - Hàng đợi email trong database (gửi lại khi SMTP lỗi), tệp lưu trên đĩa hoặc S3/Cloudflare R2.
 - Log JSON, script triển khai theo release có rollback, sao lưu hằng ngày.
 
@@ -58,6 +61,7 @@ Các biến môi trường khác (SMTP, S3/R2, proxy, pool kết nối) xem bả
 | `npm run build && npm run test:e2e` | E2E Playwright trên bản production, cần DB đã `db:seed -- --demo` |
 | `npm run db:generate -- --name <tên>` | Sinh migration sau khi sửa `*.schema.ts` |
 | `npm run mail:flush` | Gửi email còn tồn trong hàng đợi |
+| `npm run sla:remind` | Nhắc người duyệt các lượt đã quá hạn SLA (mỗi lượt một lần) |
 | `scripts/backup.sh` | Sao lưu database và `uploads/` |
 
 CI (`.github/workflows/ci.yml`) chạy audit dependency, lint, typecheck, unit test, rồi e2e với Postgres, SMTP giả và S3 giả (moto).

@@ -13,7 +13,7 @@ export async function recordAudit(
   actor: AuditActor,
   entry: {
     action: AuditAction;
-    targetType: "user" | "department" | "request_type" | "approval";
+    targetType: "user" | "department" | "request_type" | "approval" | "delegation";
     targetId?: string | null;
     summary: string;
     changes?: Record<string, unknown>;

@@ -66,6 +66,9 @@ export const auth = betterAuth({
       trustedProxies: env.DEFEAT_TRUSTED_PROXIES,
     },
   },
+  // Profile changes go through our own validated actions (users.action.ts); the generic endpoint would also
+  // let users set arbitrary image URLs.
+  disabledPaths: ["/update-user"],
   rateLimit: { storage: "database" },
   session: {
     expiresIn: 60 * 60 * 24 * 3,
